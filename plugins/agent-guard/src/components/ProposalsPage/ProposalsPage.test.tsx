@@ -89,9 +89,11 @@ const mergedDelivery = {
   argoCd: {
     state: 'observed',
     applicationName: 'gitops-pr-demo-api',
+    applicationUrl: 'http://127.0.0.1:8082/applications/gitops-pr-demo-api',
     syncStatus: 'Synced',
     healthStatus: 'Healthy',
     revision: '003d35d51920dd44c2b05e5cbaf4c6182edb4447',
+    includesApprovedMerge: true,
     workloadKind: 'Deployment',
     workloadHealth: 'Healthy',
     conditions: [],
@@ -110,8 +112,19 @@ it('renders a verified delivery and changes to unavailable after refresh', async
   render(<ProposalsPage />);
 
   expect(
-    await screen.findByText('Verified at the approved merge commit'),
+    await screen.findByText(
+      'Verified in a shared staging revision containing the approved merge',
+    ),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole('link', { name: 'Open Catalog component' }),
+  ).toHaveAttribute('href', '/catalog/default/component/gitops-pr-demo-api');
+  expect(
+    screen.getByRole('link', { name: 'Open Argo CD application' }),
+  ).toHaveAttribute(
+    'href',
+    'http://127.0.0.1:8082/applications/gitops-pr-demo-api',
+  );
   expect(screen.getByText(/sync Synced, health Healthy/)).toBeInTheDocument();
   expect(screen.getByText('task-test-123').closest('a')).toBeNull();
   expect(
@@ -139,6 +152,9 @@ it('renders a verified delivery and changes to unavailable after refresh', async
   expect(
     await screen.findByText('Not verified as deployed'),
   ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('link', { name: 'Open Catalog component' }),
+  ).toBeNull();
   expect(
     await screen.findByText(/unavailable \(request_failed\)/),
   ).toBeInTheDocument();

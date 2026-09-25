@@ -3,6 +3,8 @@ kind: CronJob
 metadata:
   name: ${{ values.serviceName }}
   namespace: staging
+  labels:
+    backstage.io/kubernetes-id: ${{ values.serviceName }}
 spec:
   schedule: '${{ values.schedule }}'
   concurrencyPolicy: Forbid
@@ -11,6 +13,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            backstage.io/kubernetes-id: ${{ values.serviceName }}
         spec:
           restartPolicy: OnFailure
           containers:

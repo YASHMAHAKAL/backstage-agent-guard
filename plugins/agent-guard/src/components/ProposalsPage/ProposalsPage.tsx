@@ -423,6 +423,12 @@ export function ProposalsPage() {
                               <dt>Environment</dt>
                               <dd>{selected.inputs.environment}</dd>
                             </div>
+                            {selected.inputs.replicas !== undefined && (
+                              <div>
+                                <dt>Replicas</dt>
+                                <dd>{selected.inputs.replicas}</dd>
+                              </div>
+                            )}
                             {selected.inputs.schedule && (
                               <div>
                                 <dt>Schedule</dt>

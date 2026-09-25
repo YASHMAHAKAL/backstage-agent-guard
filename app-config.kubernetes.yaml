@@ -1,0 +1,26 @@
+# Opt-in local Kubernetes view. Keep credentials in the process environment,
+# not in this repository or Catalog annotations.
+kubernetes:
+  serviceLocatorMethod:
+    type: multiTenant
+  clusterLocatorMethods:
+    - type: config
+      clusters:
+        - name: agent-guard-kind
+          title: Agent Guard Kind (staging)
+          url: ${AGENT_GUARD_K8S_URL}
+          authProvider: serviceAccount
+          serviceAccountToken: ${AGENT_GUARD_K8S_TOKEN}
+          caData: ${AGENT_GUARD_K8S_CA_DATA}
+          skipTLSVerify: false
+          skipMetricsLookup: true
+  # Keep the portal read-only and fetch only the resource kinds this portfolio
+  # demo produces or needs to explain their runtime state.
+  objectTypes:
+    - pods
+    - services
+    - configmaps
+    - deployments
+    - replicasets
+    - jobs
+    - cronjobs

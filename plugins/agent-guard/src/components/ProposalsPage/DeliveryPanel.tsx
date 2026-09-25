@@ -40,7 +40,7 @@ export function DeliveryPanel({
     merged &&
     delivery?.argoCd.state === 'observed' &&
     delivery.argoCd.syncStatus === 'Synced' &&
-    delivery.argoCd.revision === mergeCommitSha;
+    delivery.argoCd.includesApprovedMerge;
   const stages = [
     { label: 'Proposed', done: true },
     { label: 'Approved', done: proposal.decision?.decision === 'approve' },
@@ -57,8 +57,10 @@ export function DeliveryPanel({
     proposal.status === 'execution_failed' ||
     proposal.status === 'publish_failed';
   let verdict = 'Not verified as deployed';
-  if (delivery?.deployed) verdict = 'Verified at the approved merge commit';
-  else if (loading && !delivery) verdict = 'Checking deployment evidence…';
+  if (delivery?.deployed) {
+    verdict =
+      'Verified in a shared staging revision containing the approved merge';
+  } else if (loading && !delivery) verdict = 'Checking deployment evidence…';
 
   return (
     <section
@@ -120,11 +122,22 @@ export function DeliveryPanel({
             </a>
           )}
           {delivery?.github.state === 'merged' && (
-            <small>
-              Commit <code>{delivery.github.mergeCommitSha}</code>; approved
-              files{' '}
-              {delivery.github.approvedFilesMatch ? 'match' : 'DO NOT MATCH'}
-            </small>
+            <>
+              <small>
+                Commit <code>{delivery.github.mergeCommitSha}</code>; approved
+                files{' '}
+                {delivery.github.approvedFilesMatch ? 'match' : 'DO NOT MATCH'}
+              </small>
+              {delivery.deployed && (
+                <a
+                  href={`/catalog/default/component/${encodeURIComponent(
+                    proposal.inputs.serviceName,
+                  )}`}
+                >
+                  Open Catalog component
+                </a>
+              )}
+            </>
           )}
           {(delivery?.github.state === 'unavailable' ||
             delivery?.github.state === 'source_mismatch') && (
@@ -139,15 +152,27 @@ export function DeliveryPanel({
             {delivery ? humanize(delivery.argoCd.state) : 'Checking'}
           </strong>
           {delivery?.argoCd.state === 'observed' && (
-            <small>
-              sync {delivery.argoCd.syncStatus}, health{' '}
-              {delivery.argoCd.healthStatus}, revision{' '}
-              {delivery.argoCd.revision ?? 'unknown'}, workload{' '}
-              {delivery.argoCd.workloadKind} health{' '}
-              {delivery.argoCd.workloadHealth}
-              {delivery.argoCd.conditions.length > 0 &&
-                `; conditions: ${delivery.argoCd.conditions.join(', ')}`}
-            </small>
+            <>
+              <small>
+                sync {delivery.argoCd.syncStatus}, health{' '}
+                {delivery.argoCd.healthStatus}, revision{' '}
+                {delivery.argoCd.revision ?? 'unknown'}, workload{' '}
+                {delivery.argoCd.workloadKind} health{' '}
+                {delivery.argoCd.workloadHealth}
+                {`; approved merge ${
+                  delivery.argoCd.includesApprovedMerge
+                    ? 'included'
+                    : 'not included'
+                }`}
+                {delivery.argoCd.conditions.length > 0 &&
+                  `; conditions: ${delivery.argoCd.conditions.join(', ')}`}
+              </small>
+              {delivery.argoCd.applicationUrl && (
+                <a href={delivery.argoCd.applicationUrl}>
+                  Open Argo CD application
+                </a>
+              )}
+            </>
           )}
           {(delivery?.argoCd.state === 'unavailable' ||
             delivery?.argoCd.state === 'source_mismatch') && (

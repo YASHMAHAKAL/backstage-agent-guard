@@ -10,6 +10,7 @@ type FormValues = {
   serviceName: string;
   requestedOwner: string;
   description: string;
+  replicas: number;
   schedule: string;
 };
 
@@ -50,6 +51,7 @@ const initialValues: FormValues = {
   serviceName: '',
   requestedOwner: '',
   description: '',
+  replicas: 1,
   schedule: '',
 };
 
@@ -79,6 +81,12 @@ function validate(values: FormValues): string | null {
     values.description.trim().length > 500
   ) {
     return 'Write a description of 3–500 characters.';
+  }
+  if (
+    values.templateId !== 'scheduled-worker' &&
+    (!Number.isInteger(values.replicas) || values.replicas < 1 || values.replicas > 2)
+  ) {
+    return 'Choose an API replica count from 1 to 2.';
   }
   if (
     values.templateId === 'scheduled-worker' &&
@@ -167,6 +175,9 @@ export function CreateProposalForm({
         requestedOwner: values.requestedOwner.trim(),
         environment: 'staging',
         description: values.description.trim(),
+        ...(values.templateId !== 'scheduled-worker'
+          ? { replicas: values.replicas }
+          : {}),
         ...(values.templateId === 'scheduled-worker'
           ? { schedule: values.schedule.trim() }
           : {}),
@@ -351,6 +362,27 @@ export function CreateProposalForm({
                 }
               />
             </label>
+            {values.templateId !== 'scheduled-worker' && (
+              <label className="ag-create__field">
+                <span>Replicas</span>
+                <input
+                  name="replicas"
+                  type="number"
+                  required
+                  min={1}
+                  max={2}
+                  step={1}
+                  value={values.replicas}
+                  onChange={event =>
+                    setValues(current => ({
+                      ...current,
+                      replicas: Number(event.target.value),
+                    }))
+                  }
+                />
+                <small>Platform limit: 1–2 replicas.</small>
+              </label>
+            )}
             {values.templateId === 'scheduled-worker' && (
               <label className="ag-create__field">
                 <span>Five-field cron schedule</span>

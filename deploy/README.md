@@ -32,12 +32,21 @@ kubectl --context kind-agent-guard -n argocd label secret agent-guard-gitops-rea
   argocd.argoproj.io/secret-type=repository
 kubectl --context kind-agent-guard create namespace staging
 kubectl --context kind-agent-guard apply -f deploy/argocd/staging-application.yaml
+kubectl --context kind-agent-guard apply \
+  -f deploy/kubernetes/backstage-kubernetes-reader.yaml
 ```
 
 Protect and remove any temporary local private-key copy after verifying the
 cluster Secret. Never commit it. A deploy key was already registered for the
 current local cluster; do not repeat this step without checking the existing
 key/Secret.
+
+The last manifest creates a separate `backstage-kubernetes-reader` ServiceAccount
+in `staging`. Its Role permits only `get`, `list`, and `watch` for the resource
+kinds displayed by Backstage's Kubernetes tab; it cannot mutate workloads,
+read Secrets, or access other namespaces. The Backstage startup command in the
+[project README](../README.md#see-kubernetes-resources-in-backstage) creates a
+short-lived token for it at runtime and does not store that token in Git.
 
 Check the live state without exposing secrets:
 
@@ -48,22 +57,38 @@ kubectl --context kind-agent-guard -n argocd get application gitops-pr-demo-api 
 kubectl --context kind-agent-guard -n staging get deployment,service
 ```
 
-The Application source path is `apps/staging/gitops-pr-demo-api`. PR #1 was
-merged after the cluster bootstrap. Argo CD's restricted project intentionally
-cannot create Namespace resources, so the platform operator creates the single
-`staging` namespace before sync. Verify `Synced`, workload `Healthy`, and the
-Kubernetes Deployment's `Available` condition. Do not interpret the
-Application's `Healthy` field alone as deployment success. If the PR
-contents need changing, submit a **new** Agent Guard proposal and approval;
-never edit the approved PR branch under its existing approval digest.
+The shared Application source path is `apps/staging`. Its historical Kubernetes
+object name remains `gitops-pr-demo-api` so this is an in-place migration, not
+two Argo CD Applications managing the original workload. It uses directory
+recursion and excludes `catalog-info.yaml` (a Backstage descriptor, not a
+Kubernetes object) and historical `kustomization.yaml` files. This means each
+merged, Agent Guard-generated service folder under `apps/staging/<service-name>`
+is reconciled by the one platform-owned Application; no per-service Application
+is needed. The existing `gitops-pr-demo-api` folder remains compatible during
+the migration because its historical `kustomization.yaml` is excluded and its
+concrete Kubernetes YAML files are still rendered.
 
-The Application currently names one demonstration service. Additional proposal
-names require a separately reviewed Argo CD Application or a later trusted
-ApplicationSet design; the current bootstrap does not auto-deploy arbitrary
-services.
+Apply the updated Application manifest once to migrate a running cluster, then
+wait for it to reconcile before approving a new service proposal:
+
+```sh
+kubectl --context kind-agent-guard apply -f deploy/argocd/staging-application.yaml
+kubectl --context kind-agent-guard -n argocd wait \
+  --for=jsonpath='{.status.sync.status}'=Synced \
+  application/gitops-pr-demo-api --timeout=180s
+```
+
+PR #1 was merged after the cluster bootstrap. Argo CD's restricted project
+intentionally cannot create Namespace resources, so the platform operator
+creates the single `staging` namespace before sync. Verify `Synced`, the
+individual workload health, and a Deployment's `Available` condition (or a
+worker Job completion). Do not interpret the shared Application's `Healthy`
+field alone as proof that every workload succeeded. If PR contents need
+changing, submit a **new** Agent Guard proposal and approval; never edit an
+approved PR branch under its existing approval digest.
 
 For the Backstage read-only status view, the AppProject also grants a narrow
-`agent-guard-status` role `applications get` on this one Application. A 30-day
+`agent-guard-status` role `applications get` on this shared Application. A 30-day
 role token and the public Argo CD TLS certificate are stored in this workspace's
 ignored, mode-`600` `.env.delivery.local` file. This is not an admin token and
 it does not grant sync or mutation permissions. The backend connects through a

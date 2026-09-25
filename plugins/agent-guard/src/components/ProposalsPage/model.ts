@@ -40,6 +40,7 @@ export type Proposal = {
     requestedOwner: string;
     environment: string;
     description: string;
+    replicas?: number;
     schedule?: string;
   };
   requester: string;
@@ -99,9 +100,11 @@ export type DeliveryStatus = {
     | {
         state: 'observed';
         applicationName: string;
+        applicationUrl: string;
         syncStatus: string;
         healthStatus: string;
         revision?: string;
+        includesApprovedMerge: boolean;
         workloadKind: string;
         workloadHealth: string;
         conditions: string[];

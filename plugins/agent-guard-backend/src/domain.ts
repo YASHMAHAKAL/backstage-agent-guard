@@ -18,6 +18,9 @@ export const proposalActionSchema = z
           .regex(/^group:default\/[a-z][a-z0-9]*(-[a-z0-9]+)*$/),
         environment: z.literal('staging'),
         description: z.string().trim().min(3).max(500),
+        // APIs may request a small, reviewable replica count. This is a hard
+        // platform limit, not an advisory Jev decision.
+        replicas: z.number().int().min(1).max(2).optional(),
         schedule: z.string().trim().min(9).max(100).optional(),
       })
       .strict(),
@@ -42,6 +45,16 @@ export const proposalInputSchema = proposalActionSchema.superRefine(
       });
     }
     if (
+      value.templateId === 'scheduled-worker' &&
+      value.inputs.replicas !== undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['inputs', 'replicas'],
+        message: 'A scheduled worker does not accept Deployment replicas',
+      });
+    }
+    if (
       hasSchedule &&
       !/^([*0-9,/\-]+\s+){4}[*0-9,/\-]+$/.test(value.inputs.schedule!)
     ) {
@@ -51,8 +64,15 @@ export const proposalInputSchema = proposalActionSchema.superRefine(
         message: 'Use a five-field cron schedule',
       });
     }
-  },
-);
+  })
+  .transform(value =>
+    value.templateId === 'scheduled-worker'
+      ? value
+      : {
+          ...value,
+          inputs: { ...value.inputs, replicas: value.inputs.replicas ?? 1 },
+        },
+  );
 
 export type ProposalInput = z.infer<typeof proposalInputSchema>;
 

@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: ${{ values.serviceName }}
   namespace: staging
+  labels:
+    backstage.io/kubernetes-id: ${{ values.serviceName }}
 spec:
   type: ClusterIP
   selector:

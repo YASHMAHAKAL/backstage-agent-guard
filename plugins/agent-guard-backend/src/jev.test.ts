@@ -8,6 +8,7 @@ const input = {
     requestedOwner: 'group:default/payments-team',
     environment: 'staging' as const,
     description: 'Internal payments API',
+    replicas: 2,
   },
 };
 
@@ -61,6 +62,8 @@ describe('JevClient', () => {
       'preservesIntent',
       'mismatchSeverity',
     ]);
+    expect(body.state.proposedParameters.replicas).toBe(2);
+    expect(body.state.platformConstraints).toContain('1 through 2');
   });
 
   it('does not turn an invalid response into permission', async () => {

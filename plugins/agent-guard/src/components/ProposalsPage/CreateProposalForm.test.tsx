@@ -79,6 +79,7 @@ it('submits only narrow API inputs through Agent Guard REST', async () => {
       requestedOwner: 'group:default/payments-team',
       environment: 'staging',
       description: 'Internal payments demonstration',
+      replicas: 1,
     },
   });
   expect(mockFetch.mock.calls.some(([url]) => url.includes('scaffolder'))).toBe(

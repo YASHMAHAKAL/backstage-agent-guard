@@ -40,10 +40,10 @@ describe('frozen approval snapshots', () => {
     expect(first.files.map(file => file.path)).toEqual([
       'apps/staging/payments-api/catalog-info.yaml',
       'apps/staging/payments-api/deployment.yaml',
-      'apps/staging/payments-api/kustomization.yaml',
       'apps/staging/payments-api/service.yaml',
     ]);
     expect(first.files[1].content).toContain('name: payments-api');
+    expect(first.files[1].content).toContain('replicas: 1');
     expect(first.files[1].content).not.toContain('${{ values.serviceName }}');
     expect(snapshotHasIntegrity(first)).toBe(true);
   });
@@ -60,6 +60,17 @@ describe('frozen approval snapshots', () => {
       requester: 'user:default/guest',
     });
     expect(changedIntent.digest).not.toBe(original.digest);
+
+    const changedReplicas = createFrozenSnapshot({
+      proposalId: 'proposal-1',
+      proposal: {
+        ...proposal,
+        inputs: { ...proposal.inputs, replicas: 2 },
+      },
+      requester: 'user:default/guest',
+    });
+    expect(changedReplicas.digest).not.toBe(original.digest);
+    expect(changedReplicas.files[1].content).toContain('replicas: 2');
 
     const tampered = structuredClone(original);
     tampered.files[0].content += '\n# changed after review\n';
@@ -115,7 +126,7 @@ describe('frozen approval snapshots', () => {
     expect(snapshotHasIntegrity(tampered)).toBe(false);
   });
 
-  it('keeps the historical PR #1 approval digest unchanged', () => {
+  it('does not reuse the historical PR #1 digest after the shared-directory migration', () => {
     const historical = createFrozenSnapshot({
       proposalId: '453bbb61-302a-47bb-817d-2599ac1acfe1',
       proposal: {
@@ -135,7 +146,7 @@ describe('frozen approval snapshots', () => {
         'github.com?owner=YASHMAHAKAL&repo=backstage-agent-guard-gitops',
     });
     expect(historical.envelope.schemaVersion).toBe(1);
-    expect(historical.digest).toBe(
+    expect(historical.digest).not.toBe(
       'sha256:52de500a37f9968d2183892025e0be2d59e5430b988f118ab28fada0372f1f92',
     );
   });
@@ -173,6 +184,7 @@ describe('frozen approval snapshots', () => {
               '${{ values.requestedOwner }}',
               'group:default/payments-team',
             )
+            .replaceAll('${{ values.replicas }}', '1')
             .replaceAll('${{ values.schedule }}', schedule ?? ''),
         }));
       expect(

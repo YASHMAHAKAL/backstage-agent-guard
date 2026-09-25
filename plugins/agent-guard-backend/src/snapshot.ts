@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { ProposalInput } from './domain';
 
-const TEMPLATE_VERSION = 'agent-guard-v3-unconditional-guard-action';
+// Argo CD renders the shared apps/staging directory in directory-recursion
+// mode. Service folders deliberately contain only Kubernetes manifests; the
+// Backstage catalog descriptor is excluded by the platform-owned Application.
+const TEMPLATE_VERSION = 'agent-guard-v4-shared-staging-directory';
 // Approval under the older review-only policy must never become permission to
 // start a Scaffolder task after this feature is installed.
 const POLICY_VERSION = 'staging-review-v5-guarded-pr';
@@ -61,6 +64,7 @@ metadata:
   name: \${{ values.serviceName }}
   annotations:
     backstage.io/kubernetes-id: \${{ values.serviceName }}
+    backstage.io/kubernetes-namespace: staging
 spec:
   type: service
   lifecycle: staging
@@ -72,6 +76,8 @@ kind: Service
 metadata:
   name: \${{ values.serviceName }}
   namespace: staging
+  labels:
+    backstage.io/kubernetes-id: \${{ values.serviceName }}
 spec:
   type: ClusterIP
   selector:
@@ -95,15 +101,18 @@ metadata:
   namespace: staging
   labels:
     app.kubernetes.io/name: \${{ values.serviceName }}
+    backstage.io/kubernetes-id: \${{ values.serviceName }}
 spec:
-  replicas: 1
+  replicas: \${{ values.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: \${{ values.serviceName }}
+      backstage.io/kubernetes-id: \${{ values.serviceName }}
   template:
     metadata:
       labels:
         app.kubernetes.io/name: \${{ values.serviceName }}
+        backstage.io/kubernetes-id: \${{ values.serviceName }}
     spec:
       containers:
         - name: api
@@ -129,12 +138,6 @@ spec:
             limits:
               cpu: 250m
               memory: 256Mi
-`,
-    'kustomization.yaml': `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - deployment.yaml
-  - service.yaml
 `,
     'service.yaml': service,
   },
@@ -163,15 +166,18 @@ metadata:
   namespace: staging
   labels:
     app.kubernetes.io/name: \${{ values.serviceName }}
+    backstage.io/kubernetes-id: \${{ values.serviceName }}
 spec:
-  replicas: 1
+  replicas: \${{ values.replicas }}
   selector:
     matchLabels:
       app.kubernetes.io/name: \${{ values.serviceName }}
+      backstage.io/kubernetes-id: \${{ values.serviceName }}
   template:
     metadata:
       labels:
         app.kubernetes.io/name: \${{ values.serviceName }}
+        backstage.io/kubernetes-id: \${{ values.serviceName }}
     spec:
       containers:
         - name: api
@@ -206,13 +212,6 @@ spec:
           configMap:
             name: \${{ values.serviceName }}-app
 `,
-    'kustomization.yaml': `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - configmap.yaml
-  - deployment.yaml
-  - service.yaml
-`,
     'service.yaml': service,
   },
   'scheduled-worker': {
@@ -222,6 +221,8 @@ kind: CronJob
 metadata:
   name: \${{ values.serviceName }}
   namespace: staging
+  labels:
+    backstage.io/kubernetes-id: \${{ values.serviceName }}
 spec:
   schedule: '\${{ values.schedule }}'
   concurrencyPolicy: Forbid
@@ -230,6 +231,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            backstage.io/kubernetes-id: \${{ values.serviceName }}
         spec:
           restartPolicy: OnFailure
           containers:
@@ -244,11 +248,6 @@ spec:
                 limits:
                   cpu: 100m
                   memory: 64Mi
-`,
-    'kustomization.yaml': `apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - cronjob.yaml
 `,
   },
 };
@@ -274,6 +273,7 @@ function render(source: string, inputs: ProposalInput['inputs']): string {
   return source
     .replaceAll('${{ values.serviceName }}', inputs.serviceName)
     .replaceAll('${{ values.requestedOwner }}', inputs.requestedOwner)
+    .replaceAll('${{ values.replicas }}', String(inputs.replicas ?? 1))
     .replaceAll('${{ values.schedule }}', inputs.schedule ?? '');
 }
 

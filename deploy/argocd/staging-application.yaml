@@ -16,23 +16,29 @@ spec:
       namespace: staging
   roles:
     - name: agent-guard-status
-      description: Read only this demonstration Application from Backstage.
+      description: Read only the shared staging Application from Backstage.
       policies:
         - p, proj:agent-guard-staging:agent-guard-status, applications, get, agent-guard-staging/gitops-pr-demo-api, allow
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
+  # Retain the original Kubernetes object name so updating the source path is
+  # an in-place migration, not two Applications managing the old workload.
   name: gitops-pr-demo-api
   namespace: argocd
-  annotations:
-    backstage.io/kubernetes-id: gitops-pr-demo-api
 spec:
   project: agent-guard-staging
   source:
     repoURL: git@github.com:YASHMAHAKAL/backstage-agent-guard-gitops.git
     targetRevision: main
-    path: apps/staging/gitops-pr-demo-api
+    path: apps/staging
+    directory:
+      recurse: true
+      # Service folders contain a Backstage descriptor, not a Kubernetes
+      # object. Older demo folders may retain a kustomization file; exclude it
+      # while directory mode renders their concrete Kubernetes YAML files.
+      exclude: '{**/catalog-info.yaml,**/kustomization.yaml}'
   destination:
     server: https://kubernetes.default.svc
     namespace: staging

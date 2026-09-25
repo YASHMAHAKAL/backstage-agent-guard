@@ -48,6 +48,18 @@ const argoTreeSchema = z.object({
   ),
 });
 
+const githubComparisonSchema = z.object({
+  status: z.enum(['ahead', 'behind', 'diverged', 'identical']),
+});
+
+// This is platform-owned cluster configuration. It intentionally does not
+// come from an agent proposal or a Scaffolder input.
+// This retains its historical Kubernetes object name while now watching the
+// shared staging directory. Renaming it would require a separate safe Argo CD
+// Application migration to avoid concurrent ownership of existing resources.
+const sharedStagingApplication = 'gitops-pr-demo-api';
+const sharedStagingPath = 'apps/staging';
+
 export type GitHubDelivery =
   | { state: 'not_published' }
   | { state: 'unavailable'; reason: string }
@@ -70,9 +82,11 @@ export type ArgoDelivery =
   | {
       state: 'observed';
       applicationName: string;
+      applicationUrl: string;
       syncStatus: string;
       healthStatus: string;
       revision?: string;
+      includesApprovedMerge: boolean;
       workloadKind: string;
       workloadHealth: string;
       conditions: string[];
@@ -251,14 +265,14 @@ export class DeliveryStatusObserver {
         deployed: false,
       };
     }
-    const argoCd = await this.observeArgoCd(record);
+    const argoCd = await this.observeArgoCd(record, github.mergeCommitSha);
     return {
       checkedAt,
       github,
       argoCd,
       deployed:
         argoCd.state === 'observed' &&
-        argoCd.revision === github.mergeCommitSha &&
+        argoCd.includesApprovedMerge &&
         argoCd.syncStatus === 'Synced' &&
         argoCd.healthStatus === 'Healthy' &&
         argoCd.workloadHealth === 'Healthy' &&
@@ -366,13 +380,17 @@ export class DeliveryStatusObserver {
     };
   }
 
-  private async observeArgoCd(record: ProposalRecord): Promise<ArgoDelivery> {
+  private async observeArgoCd(
+    record: ProposalRecord,
+    approvedMergeCommit: string,
+  ): Promise<ArgoDelivery> {
     if (!this.argoCdBaseUrl || !this.options.argoCdToken) {
       return { state: 'not_configured' };
     }
-    const name = record.inputs.serviceName;
     const project = 'agent-guard-staging';
-    const path = `/api/v1/applications/${encodeURIComponent(name)}`;
+    const path = `/api/v1/applications/${encodeURIComponent(
+      sharedStagingApplication,
+    )}`;
     const application = await this.readJson(
       `${this.argoCdBaseUrl}${path}?project=${project}`,
       this.options.argoCdToken,
@@ -396,13 +414,34 @@ export class DeliveryStatusObserver {
         `git@github.com:${repository.owner}/${repository.repo}.git`.toLowerCase() ||
       spec.source.targetRevision !==
         record.snapshot!.envelope.gitopsTarget.branch ||
-      spec.source.path !== record.snapshot!.envelope.gitopsTarget.path ||
+      spec.source.path !== sharedStagingPath ||
       spec.destination.namespace !== record.inputs.environment
     ) {
       return {
         state: 'source_mismatch',
         reason: 'application_target_mismatch',
       };
+    }
+    if (!status.sync.revision) {
+      return { state: 'unavailable', reason: 'missing_application_revision' };
+    }
+    if (!this.options.githubToken) {
+      return { state: 'unavailable', reason: 'github_token_not_configured' };
+    }
+    // A shared Application naturally advances when later service PRs merge.
+    // Verify that it contains this proposal's approved merge, rather than
+    // requiring its revision to remain frozen at that older commit.
+    const comparison = await this.readJson(
+      `https://api.github.com/repos/${repository.owner}/${repository.repo}/compare/${approvedMergeCommit}...${status.sync.revision}`,
+      this.options.githubToken!,
+      true,
+    );
+    if (!comparison.ok) {
+      return { state: 'unavailable', reason: comparison.reason };
+    }
+    const parsedComparison = githubComparisonSchema.safeParse(comparison.body);
+    if (!parsedComparison.success) {
+      return { state: 'unavailable', reason: 'invalid_compare_response' };
     }
     const tree = await this.readJson(
       `${this.argoCdBaseUrl}${path}/resource-tree?project=${project}`,
@@ -422,14 +461,20 @@ export class DeliveryStatusObserver {
       node =>
         node.kind === workloadKind &&
         node.namespace === record.inputs.environment &&
-        node.name === name,
+        node.name === record.inputs.serviceName,
     );
     return {
       state: 'observed',
-      applicationName: name,
+      applicationName: sharedStagingApplication,
+      applicationUrl: `${this.argoCdBaseUrl}/applications/${encodeURIComponent(
+        sharedStagingApplication,
+      )}`,
       syncStatus: status.sync.status,
       healthStatus: status.health.status,
       revision: status.sync.revision,
+      includesApprovedMerge:
+        parsedComparison.data.status === 'ahead' ||
+        parsedComparison.data.status === 'identical',
       workloadKind,
       workloadHealth: workload?.health?.status ?? 'Unknown',
       conditions: (status.conditions ?? []).map(condition => condition.type),

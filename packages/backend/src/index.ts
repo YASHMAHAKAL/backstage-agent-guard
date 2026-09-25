@@ -7,6 +7,7 @@
  */
 
 import { createBackend } from '@backstage/backend-defaults';
+import { agentGuardCatalogModule } from '@internal/backstage-plugin-agent-guard-backend';
 
 const backend = createBackend();
 
@@ -42,6 +43,7 @@ if (authMode === 'github') {
 
 // catalog plugin
 backend.add(import('@backstage/plugin-catalog-backend'));
+backend.add(agentGuardCatalogModule);
 backend.add(
   import('@backstage/plugin-catalog-backend-module-scaffolder-entity-model'),
 );

@@ -1,5 +1,5 @@
 import { DeliveryStatusObserver } from './deliveryStatus';
-import { createFrozenSnapshot } from './snapshot';
+import { createFrozenSnapshot, FrozenSnapshot } from './snapshot';
 import { ProposalRecord } from './services/ProposalService';
 
 const proposalId = '453bbb61-302a-47bb-817d-2599ac1acfe1';
@@ -20,6 +20,61 @@ const snapshot = createFrozenSnapshot({
     },
   },
 });
+
+// PR #1 was created before the shared-directory migration and includes the
+// per-service kustomization file. Keep its frozen evidence for the opt-in live
+// observer test; new proposals use the v4 directory-recursion layout above.
+const legacyProposal = {
+  declaredIntent:
+    'Submit a new Agent Guard proposal for an internal staging Node.js API named gitops-pr-demo-api, owned by group:default/payments-team. Use the nodejs-api template. No public ingress or database. Do not reuse proposal 2a1574b0-3dbb-4552-9106-68f8a986d14c, run Scaffolder directly, or approve anything.',
+  templateId: 'nodejs-api' as const,
+  inputs: {
+    serviceName: 'gitops-pr-demo-api',
+    requestedOwner: 'group:default/payments-team',
+    environment: 'staging' as const,
+    description:
+      'Internal staging Node.js API with no public ingress or database.',
+  },
+};
+const legacyBaseSnapshot = createFrozenSnapshot({
+  proposalId,
+  requester: 'user:default/developer',
+  gitopsRepoUrl:
+    'github.com?owner=YASHMAHAKAL&repo=backstage-agent-guard-gitops',
+  proposal: legacyProposal,
+});
+const legacyFiles = [
+  ...legacyBaseSnapshot.files,
+  {
+    path: 'apps/staging/gitops-pr-demo-api/kustomization.yaml',
+    content: `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - service.yaml
+`,
+    sha256:
+      'sha256:b074f5274b540eb3d4dc5fb5c5bb42a0f6901e5bec690a276ec29909cbcfda2e',
+  },
+].sort((left, right) => left.path.localeCompare(right.path));
+const legacySnapshot: FrozenSnapshot = {
+  envelope: {
+    ...legacyBaseSnapshot.envelope,
+    template: {
+      id: 'nodejs-api',
+      version: 'agent-guard-v3-unconditional-guard-action',
+      digest:
+        'sha256:dc099ecb97219e0600c6bcf2dcbca5b204142dadc9d5b565f08370bf58acc435',
+    },
+    generatedFiles: legacyFiles.map(file => ({
+      path: file.path,
+      sha256: file.sha256,
+    })),
+  },
+  digest:
+    'sha256:52de500a37f9968d2183892025e0be2d59e5430b988f118ab28fada0372f1f92',
+  files: legacyFiles,
+};
 
 function record(): ProposalRecord {
   return {
@@ -51,6 +106,15 @@ function record(): ProposalRecord {
   };
 }
 
+function liveRecord(): ProposalRecord {
+  const result = record();
+  result.declaredIntent = legacyProposal.declaredIntent;
+  result.inputs = legacyProposal.inputs;
+  result.snapshot = legacySnapshot;
+  result.decision!.digest = legacySnapshot.digest;
+  return result;
+}
+
 function fixtureFetch(
   options: {
     prState?: 'open' | 'closed';
@@ -58,6 +122,7 @@ function fixtureFetch(
     changedFile?: boolean;
     argoRevision?: string;
     argoPath?: string;
+    compareStatus?: 'ahead' | 'behind' | 'diverged' | 'identical';
     workloadHealth?: string;
     argoConditions?: Array<{ type: string }>;
   } = {},
@@ -105,6 +170,8 @@ function fixtureFetch(
           },
         ],
       };
+    } else if (url.pathname.includes('/compare/')) {
+      body = { status: options.compareStatus ?? 'identical' };
     } else if (url.pathname.endsWith('/applications/gitops-pr-demo-api')) {
       body = {
         spec: {
@@ -113,7 +180,7 @@ function fixtureFetch(
             repoURL:
               'git@github.com:YASHMAHAKAL/backstage-agent-guard-gitops.git',
             targetRevision: 'main',
-            path: options.argoPath ?? 'apps/staging/gitops-pr-demo-api',
+            path: options.argoPath ?? 'apps/staging',
           },
           destination: { namespace: 'staging' },
         },
@@ -152,12 +219,14 @@ it('verifies exact merged files, matching Argo revision, and workload health', a
   });
   expect(delivery.argoCd).toMatchObject({
     state: 'observed',
+    applicationUrl: 'http://127.0.0.1:8082/applications/gitops-pr-demo-api',
     syncStatus: 'Synced',
     healthStatus: 'Healthy',
+    includesApprovedMerge: true,
     workloadHealth: 'Healthy',
   });
   expect(delivery.deployed).toBe(true);
-  expect(fetcher).toHaveBeenCalledTimes(snapshot.files.length + 3);
+  expect(fetcher).toHaveBeenCalledTimes(snapshot.files.length + 4);
 });
 
 it('does not claim deployment while the PR is merely open or closed unmerged', async () => {
@@ -193,10 +262,22 @@ it('refuses delivery claims if the stored approval digest is inconsistent', asyn
   expect(fetcher).not.toHaveBeenCalled();
 });
 
-it('requires the exact Argo revision, target, and healthy workload', async () => {
+it('accepts a later shared-Application revision only when it contains the approved merge', async () => {
+  const delivery = await observer(
+    fixtureFetch({ argoRevision: 'f'.repeat(40), compareStatus: 'ahead' }),
+  ).observe(record());
+  expect(delivery.argoCd).toMatchObject({
+    state: 'observed',
+    revision: 'f'.repeat(40),
+    includesApprovedMerge: true,
+  });
+  expect(delivery.deployed).toBe(true);
+});
+
+it('requires the shared Application target, approved merge ancestry, and healthy workload', async () => {
   for (const options of [
-    { argoRevision: 'f'.repeat(40) },
     { argoPath: 'apps/staging/another-service' },
+    { compareStatus: 'behind' as const },
     { workloadHealth: 'Progressing' },
     { argoConditions: [{ type: 'ComparisonError' }] },
   ]) {
@@ -247,7 +328,7 @@ liveTest(
       argoCdUrl: process.env.AGENT_GUARD_ARGOCD_URL,
       argoCdToken: process.env.AGENT_GUARD_ARGOCD_TOKEN,
       argoCdCaBase64: process.env.AGENT_GUARD_ARGOCD_CA_B64,
-    }).observe(record());
+    }).observe(liveRecord());
     expect(delivery.github).toMatchObject({
       state: 'merged',
       approvedFilesMatch: true,

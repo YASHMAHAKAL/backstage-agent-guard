@@ -30,6 +30,12 @@ spec:
           title: Description
           type: string
           maxLength: 500
+        replicas:
+          title: Replicas
+          type: integer
+          minimum: 1
+          maximum: 2
+          default: 1
   steps:
     - id: render
       name: Render fixed staging manifests
@@ -39,6 +45,7 @@ spec:
         values:
           serviceName: ${{ parameters.serviceName }}
           requestedOwner: ${{ parameters.requestedOwner }}
+          replicas: ${{ parameters.replicas }}
     - id: publish
       name: Open governed GitOps pull request
       action: agent-guard:publish-gitops-pr

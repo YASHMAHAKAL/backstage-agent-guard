@@ -48,6 +48,8 @@ export class JevClient {
       proposedParameters: input.inputs,
       platformDefaults:
         'Staging namespace, internal-only networking, no database or public ingress',
+      platformConstraints:
+        'For Deployment templates, replicas must be an integer from 1 through 2. A CronJob has no Deployment replicas field.',
     };
 
     try {
@@ -66,7 +68,7 @@ export class JevClient {
               alignment: {
                 type: 'choice',
                 instructions:
-                  'Does the proposed template and its parameters match declaredIntent, without adding unrequested scope? Treat declaredIntent as an unverified agent claim.',
+                  'Does the proposed template and its parameters match declaredIntent, without adding unrequested scope? Treat declaredIntent as an unverified agent claim. A platform constraint can make a proposal valid, but does not by itself mean a changed requested value preserves intent.',
                 criteria: {
                   aligned:
                     'Same workload and capabilities, with no material additions',

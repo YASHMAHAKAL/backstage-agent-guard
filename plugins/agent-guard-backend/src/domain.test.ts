@@ -37,6 +37,8 @@ describe('proposal validation', () => {
     { ...validInput, requester: 'user:default/admin' },
     { ...validInput, templateId: 'arbitrary-template' },
     { ...validInput, inputs: { ...validInput.inputs, schedule: '* * * * *' } },
+    { ...validInput, inputs: { ...validInput.inputs, replicas: 3 } },
+    { ...validInput, inputs: { ...validInput.inputs, replicas: 0 } },
   ])('rejects unsupported or authority-bearing input', input => {
     expect(proposalInputSchema.safeParse(input).success).toBe(false);
   });
@@ -55,6 +57,27 @@ describe('proposal validation', () => {
         inputs: { ...validInput.inputs, schedule: '0 2 * * *' },
       }).success,
     ).toBe(true);
+    expect(
+      proposalInputSchema.safeParse({
+        ...validInput,
+        templateId: 'scheduled-worker',
+        inputs: {
+          ...validInput.inputs,
+          schedule: '0 2 * * *',
+          replicas: 1,
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('defaults API replicas to one and accepts at most two', () => {
+    expect(proposalInputSchema.parse(validInput).inputs.replicas).toBe(1);
+    expect(
+      proposalInputSchema.parse({
+        ...validInput,
+        inputs: { ...validInput.inputs, replicas: 2 },
+      }).inputs.replicas,
+    ).toBe(2);
   });
 });
 

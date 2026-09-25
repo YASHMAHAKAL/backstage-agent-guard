@@ -23,7 +23,7 @@ This is a portfolio demonstration for platform engineering, DevOps, SRE, and clo
 | `fastapi-api` | Internal, always-running Python FastAPI HTTP API | Deployment + ClusterIP Service |
 | `scheduled-worker` | Scheduled background work | CronJob |
 
-Use pinned prebuilt demo images. The initial templates do not provision public ingress, databases, arbitrary images, source repositories, cluster credentials, or executable shell steps supplied by the agent. Template inputs should be narrow: `serviceName`, `requestedOwner`, `environment` (staging in runnable demo), description, and schedule where relevant. Backend configuration owns cluster, namespace, image, repository, resource defaults, and paths. Validate the requested owner against catalog context and policy.
+Use pinned prebuilt demo images. The initial templates do not provision public ingress, databases, arbitrary images, source repositories, cluster credentials, or executable shell steps supplied by the agent. Template inputs should be narrow: `serviceName`, `requestedOwner`, `environment` (staging in runnable demo), description, and schedule where relevant. API templates accept a reviewable integer `replicas` value from 1 through 2; the scheduled worker is a CronJob and has no Deployment replicas field. Backend configuration owns cluster, namespace, image, repository, resource defaults, and paths. Validate the requested owner against catalog context and policy.
 
 ## Successful journey
 
@@ -54,7 +54,8 @@ Initial MCP request shape; adjust precise schema during implementation:
     "serviceName": "payments-api",
     "requestedOwner": "group:default/payments-team",
     "environment": "staging",
-    "description": "Internal payments API"
+    "description": "Internal payments API",
+    "replicas": 1
   }
 }
 ```
