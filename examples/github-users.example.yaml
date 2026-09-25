@@ -1,0 +1,20 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: developer
+  # Replace with the immutable GitHub node_id of the requester account.
+  annotations:
+    github.com/user-id: '<REQUESTER_GITHUB_NODE_ID>'
+spec:
+  memberOf: [payments-team]
+---
+apiVersion: backstage.io/v1alpha1
+kind: User
+metadata:
+  name: reviewer
+  # Replace with the immutable GitHub node_id of a distinct reviewer account.
+  annotations:
+    github.com/user-id: '<REVIEWER_GITHUB_NODE_ID>'
+spec:
+  memberOf: [payments-team]

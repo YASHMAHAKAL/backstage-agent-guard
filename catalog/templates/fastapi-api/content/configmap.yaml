@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${{ values.serviceName }}-app
+  namespace: staging
+data:
+  main.py: |
+    import os
+    from fastapi import FastAPI
+
+    app = FastAPI()
+
+    @app.get("/")
+    def root():
+        return {"service": os.environ["SERVICE_NAME"], "ok": True}

@@ -1,0 +1,6 @@
+# Opt-in GitOps PR publishing. Load after app-config.yaml only when
+# AGENT_GUARD_GITOPS_REPO_URL and GITHUB_TOKEN are configured.
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_TOKEN}

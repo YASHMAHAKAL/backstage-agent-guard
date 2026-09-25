@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${{ values.serviceName }}
+  namespace: staging
+  labels:
+    app.kubernetes.io/name: ${{ values.serviceName }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ${{ values.serviceName }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ${{ values.serviceName }}
+    spec:
+      containers:
+        - name: api
+          image: docker.io/library/node@sha256:f2dc6eea95f787e25f173ba9904c9d0647ab2506178c7b5b7c5a3d02bc4af145
+          imagePullPolicy: IfNotPresent
+          command: [node, -e]
+          args:
+            - "require('http').createServer((req,res)=>{res.setHeader('content-type','application/json');res.end(JSON.stringify({service:process.env.SERVICE_NAME,ok:true}))}).listen(8080,'0.0.0.0')"
+          env:
+            - name: SERVICE_NAME
+              value: ${{ values.serviceName }}
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

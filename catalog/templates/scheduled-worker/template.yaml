@@ -1,0 +1,50 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: scheduled-worker
+  title: Scheduled worker
+  description: Render a platform-owned scheduled demo job and open a governed GitOps PR when configured.
+  tags: [agent-guard, staging, cronjob]
+spec:
+  owner: group:default/platform-team
+  type: service
+  parameters:
+    - title: Worker identity and schedule
+      required:
+        [serviceName, requestedOwner, environment, description, schedule]
+      properties:
+        serviceName:
+          title: Worker name
+          type: string
+          pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+          maxLength: 63
+        requestedOwner:
+          title: Owning group
+          type: string
+          pattern: '^group:default/[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+        environment:
+          title: Environment
+          type: string
+          enum: [staging]
+          default: staging
+        description:
+          title: Description
+          type: string
+          maxLength: 500
+        schedule:
+          title: Cron schedule
+          type: string
+          pattern: '^([*0-9,/-]+\s+){4}[*0-9,/-]+$'
+  steps:
+    - id: render
+      name: Render fixed staging manifests
+      action: fetch:template
+      input:
+        url: ./content
+        values:
+          serviceName: ${{ parameters.serviceName }}
+          requestedOwner: ${{ parameters.requestedOwner }}
+          schedule: ${{ parameters.schedule }}
+    - id: publish
+      name: Open governed GitOps pull request
+      action: agent-guard:publish-gitops-pr

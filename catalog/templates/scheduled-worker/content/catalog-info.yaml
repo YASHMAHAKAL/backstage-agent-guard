@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.serviceName }}
+  annotations:
+    backstage.io/kubernetes-id: ${{ values.serviceName }}
+spec:
+  type: service
+  lifecycle: staging
+  owner: ${{ values.requestedOwner }}

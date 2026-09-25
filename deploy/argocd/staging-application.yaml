@@ -1,0 +1,42 @@
+# This is a platform-owned bootstrap object, not a Scaffolder output.
+# Apply only after installing Argo CD and configuring read-only access to the
+# private GitOps repository. The source path does not exist on main until the
+# separately reviewed workload PR is merged.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: agent-guard-staging
+  namespace: argocd
+spec:
+  description: Agent Guard staging demo, restricted to its GitOps repository.
+  sourceRepos:
+    - git@github.com:YASHMAHAKAL/backstage-agent-guard-gitops.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: staging
+  roles:
+    - name: agent-guard-status
+      description: Read only this demonstration Application from Backstage.
+      policies:
+        - p, proj:agent-guard-staging:agent-guard-status, applications, get, agent-guard-staging/gitops-pr-demo-api, allow
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitops-pr-demo-api
+  namespace: argocd
+  annotations:
+    backstage.io/kubernetes-id: gitops-pr-demo-api
+spec:
+  project: agent-guard-staging
+  source:
+    repoURL: git@github.com:YASHMAHAKAL/backstage-agent-guard-gitops.git
+    targetRevision: main
+    path: apps/staging/gitops-pr-demo-api
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: staging
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: false

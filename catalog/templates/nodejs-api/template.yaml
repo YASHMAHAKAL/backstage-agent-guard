@@ -1,0 +1,44 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: nodejs-api
+  title: Internal Node.js API
+  description: Render a platform-owned Node.js demo API and open a governed GitOps PR when configured.
+  tags: [agent-guard, staging, nodejs]
+spec:
+  owner: group:default/platform-team
+  type: service
+  parameters:
+    - title: Service identity
+      required: [serviceName, requestedOwner, environment, description]
+      properties:
+        serviceName:
+          title: Service name
+          type: string
+          pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+          maxLength: 63
+        requestedOwner:
+          title: Owning group
+          type: string
+          pattern: '^group:default/[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+        environment:
+          title: Environment
+          type: string
+          enum: [staging]
+          default: staging
+        description:
+          title: Description
+          type: string
+          maxLength: 500
+  steps:
+    - id: render
+      name: Render fixed staging manifests
+      action: fetch:template
+      input:
+        url: ./content
+        values:
+          serviceName: ${{ parameters.serviceName }}
+          requestedOwner: ${{ parameters.requestedOwner }}
+    - id: publish
+      name: Open governed GitOps pull request
+      action: agent-guard:publish-gitops-pr
