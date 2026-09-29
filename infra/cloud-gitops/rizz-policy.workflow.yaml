@@ -1,0 +1,39 @@
+# Installation template for the GitOps repo, NOT this platform repo's workflow.
+# Install trusted validator/target on main before opening cloud release PRs.
+name: Rizz manifest policy
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  rizz-manifest-policy:
+    name: rizz-manifest-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Use Node 22 for the standalone validator
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Checkout trusted base policy
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout candidate merge tree
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate candidate with trusted code and target
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: >-
+          node trusted/.platform/rizz/validate.cjs
+          candidate trusted/.platform/rizz/target.json
+          "$BASE_SHA" "$CANDIDATE_SHA"

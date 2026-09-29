@@ -2,10 +2,18 @@ import {
   coreServices,
   createBackendModule,
 } from '@backstage/backend-plugin-api';
-import { ScmIntegrations } from '@backstage/integration';
+import {
+  DefaultGithubCredentialsProvider,
+  ScmIntegrations,
+} from '@backstage/integration';
 import { createPublishGithubPullRequestAction } from '@backstage/plugin-scaffolder-backend-module-github';
 import { scaffolderActionsExtensionPoint } from '@backstage/plugin-scaffolder-node';
 import { createGuardedPublishAction, GuardClient } from './publishAction';
+import {
+  CloudGuardClient,
+  ExactBaseCloudPublisher,
+  createCloudPublishAction,
+} from './cloudPublishAction';
 
 export const agentGuardScaffolderModule = createBackendModule({
   pluginId: 'scaffolder',
@@ -26,6 +34,22 @@ export const agentGuardScaffolderModule = createBackendModule({
         });
         const guard = new GuardClient({ auth, discovery });
         actions.addActions(createGuardedPublishAction({ guard, githubAction }));
+        // Private action only: no cloud template/config is enabled here.
+        const credentials =
+          DefaultGithubCredentialsProvider.fromIntegrations(integrations);
+        actions.addActions(
+          createCloudPublishAction({
+            guard: new CloudGuardClient({ auth, discovery }),
+            publisher: new ExactBaseCloudPublisher({
+              getToken: async repository =>
+                (
+                  await credentials.getCredentials({
+                    url: repository.replace(/\.git$/, ''),
+                  })
+                ).token ?? '',
+            }),
+          }),
+        );
       },
     });
   },

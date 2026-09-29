@@ -1,5 +1,7 @@
 # Delivery plan and proof
 
+This is the original local-demo roadmap, not a current implementation-status report. Inspect code and tests before repeating a milestone. The approved cloud extension is specified in `cloud-delivery.md` and preserves this local mode.
+
 ## Suggested workspace shape
 
 The requested directory is the future Backstage application repository. The GitOps repository is a future sibling, not nested inside this skill.

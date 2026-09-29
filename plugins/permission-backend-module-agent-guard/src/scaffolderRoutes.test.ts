@@ -64,7 +64,12 @@ function startBackend() {
       }),
       actingAuthFactory,
       permissionsServiceFactory,
-      catalogServiceMock.factory({ entities: [template] }),
+      catalogServiceMock.factory({
+        entities: [
+          template,
+          { ...template, metadata: { name: 'deploy-rizz-ai' } },
+        ],
+      }),
       scaffolderPlugin,
       permissionPlugin,
       permissionModuleAgentGuard,
@@ -131,6 +136,20 @@ describe('Scaffolder HTTP bypass protection', () => {
           .expect(response =>
             expect(response.body.error.name).toBe('NotAllowedError'),
           );
+        await request(backend.server)
+          .post('/api/scaffolder/v2/tasks')
+          .set('Authorization', authorization)
+          .send({ templateRef: 'template:default/deploy-rizz-ai', values: {} })
+          .expect(403);
+        await request(backend.server)
+          .post('/api/scaffolder/v2/dry-run')
+          .set('Authorization', authorization)
+          .send({
+            template: { ...template, metadata: { name: 'deploy-rizz-ai' } },
+            values: {},
+            directoryContents: [],
+          })
+          .expect(403);
 
         await request(backend.server)
           .get('/api/scaffolder/v2/tasks')

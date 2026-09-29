@@ -1,0 +1,12 @@
+# Opt-in external runner authentication. Do not include this profile in the
+# normal local portal start. The token is distinct from the runner HMAC key,
+# Backstage user OAuth credentials, GitHub tokens, and AWS credentials.
+backend:
+  auth:
+    externalAccess:
+      - type: static
+        options:
+          token: ${AGENT_GUARD_RUNNER_SERVICE_TOKEN}
+          subject: rizz-terraform-runner
+        accessRestrictions:
+          - plugin: agent-guard

@@ -188,6 +188,26 @@
   padding: 18px 20px;
 }
 
+.ag-release-panel {
+  padding: clamp(20px, 4vw, 40px);
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+.ag-release-panel code {
+  overflow-wrap: anywhere;
+}
+
+.ag-release-panel select {
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid var(--ag-line);
+  border-radius: 8px;
+  background: var(--ag-soft);
+  color: var(--ag-ink);
+  font: inherit;
+}
+
 .ag-overview span,
 .ag-target > span,
 .ag-policy > span,
@@ -1373,4 +1393,76 @@
   .ag-page * {
     transition-duration: 0.01ms !important;
   }
+}
+.ag-cloud-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ag-cloud-queue .ag-button {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.ag-cloud-queue small {
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+.ag-intent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 760px) {
+  .ag-intent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.ag-cloud-page {
+  max-width: 1200px;
+  display: grid;
+  gap: 22px;
+}
+.ag-cloud-page > .ag-card {
+  padding: clamp(20px, 3vw, 32px);
+  min-width: 0;
+  margin: 0;
+  max-width: none;
+}
+.ag-cloud-page pre {
+  max-height: 440px;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--ag-soft);
+  font-size: 0.82rem;
+}
+.ag-cloud-page code {
+  overflow-wrap: anywhere;
+}
+.ag-cloud-queue .ag-button[aria-pressed='true'] {
+  border-color: var(--ag-accent);
+  background: color-mix(in srgb, var(--ag-accent) 8%, var(--ag-surface));
+}
+.ag-cloud-delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.ag-cloud-page progress {
+  width: 100%;
+  height: 12px;
+  margin-top: 20px;
+  accent-color: #26b86b;
+}
+
+.ag-cloud-delivery-grid > div {
+  border: 1px solid var(--ag-border, #727272);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-wrap: anywhere;
 }

@@ -1,0 +1,27 @@
+{
+  "verifiedAt": "2026-09-26",
+  "kubernetesVersion": "1.35.0",
+  "charts": {
+    "argo-cd": {
+      "version": "10.9.2",
+      "appVersion": "v3.5.3",
+      "repo": "https://argoproj.github.io/argo-helm",
+      "url": "https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.9.2/argo-cd-10.9.2.tgz",
+      "sha256": "970ced346a0ddc3e475a7ff780e9b9c2fdebc07d9a367d2edb6ef4f49832c24a"
+    },
+    "aws-load-balancer-controller": {
+      "version": "3.5.0",
+      "appVersion": "v3.5.0",
+      "repo": "https://aws.github.io/eks-charts",
+      "url": "https://aws.github.io/eks-charts/aws-load-balancer-controller-3.5.0.tgz",
+      "sha256": "45051f634b33e10baccb3354d0681b7de787c60445e599fa276e0c9aedd4ccd5"
+    },
+    "external-secrets": {
+      "version": "2.11.0",
+      "appVersion": "v2.11.0",
+      "repo": "https://charts.external-secrets.io",
+      "url": "https://github.com/external-secrets/external-secrets/releases/download/helm-chart-2.11.0/external-secrets-2.11.0.tgz",
+      "sha256": "8199b42fe80b871c6a86233a80bb14f599fd6e1e6462c1216d836577f845e161"
+    }
+  }
+}

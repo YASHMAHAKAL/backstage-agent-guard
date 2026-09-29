@@ -1,0 +1,21 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: deploy-rizz-ai
+  title: Deploy Rizz.AI release to EKS staging
+  description: Private Agent Guard executor. Submit from Rizz.AI deployments; direct Scaffolder execution is blocked.
+  annotations:
+    agent-guard.backstage.io/recipe-version: rizz-paired-v1-restricted-alb
+  tags: [agent-guard, eks-staging, governed-release]
+spec:
+  owner: group:default/platform-team
+  type: service
+  parameters: []
+  steps:
+    - id: publish
+      name: Publish the approved Rizz.AI snapshot
+      action: agent-guard:publish-rizz-cloud-pr
+  output:
+    links:
+      - title: Reviewed draft GitOps PR
+        url: ${{ steps.publish.output.pullRequestUrl }}

@@ -1,0 +1,42 @@
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: rizz-eks-staging
+  title: Rizz.AI EKS staging cluster
+  description: Platform-owned staging cluster target. Catalog registration is not proof of provisioning.
+  tags: [rizz-ai, aws, eks, planned]
+  annotations:
+    agent-guard.backstage.io/provisioning-state: planned
+spec:
+  type: kubernetes-cluster
+  owner: group:default/platform-team
+  system: rizz-ai
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: rizz-staging-namespace
+  title: Rizz.AI staging namespace
+  description: Application namespace reserved for the approved EKS target; live status comes from Kubernetes.
+  tags: [rizz-ai, kubernetes, planned]
+  annotations:
+    agent-guard.backstage.io/provisioning-state: planned
+spec:
+  type: kubernetes-namespace
+  owner: group:default/platform-team
+  system: rizz-ai
+  dependsOn: [resource:default/rizz-eks-staging]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: rizz-ecr-registry
+  title: Rizz.AI paired image registry
+  description: Platform-owned ECR repositories for verified frontend/backend images; actual availability is checked by the release source.
+  tags: [rizz-ai, aws, ecr, planned]
+  annotations:
+    agent-guard.backstage.io/provisioning-state: planned
+spec:
+  type: container-registry
+  owner: group:default/platform-team
+  system: rizz-ai

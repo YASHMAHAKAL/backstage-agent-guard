@@ -1,0 +1,57 @@
+# EKS staging — local preparation only
+
+Not applied to AWS. Mock tests do not establish permissions, regional availability, capacity, compatibility or deployment success. Existing Kind configuration is untouched.
+
+## Configuration
+
+- Fixed `us-east-1`, `rizz-eks-staging`, isolated S3 key `rizz-platform/eks-staging/terraform.tfstate`, encryption/native locking. Backend account/bucket/profile inputs remain private.
+- Two AZs, two public ALB/NAT subnets and two private worker subnets. One NAT/EIP, S3 gateway endpoint; no automatic instance public IPs. Single NAT is not HA and second-AZ traffic can incur cross-AZ costs.
+- EKS 1.35, standard support, private endpoint plus public endpoint restricted to reviewed individual IPv4 `/32`s. Changing home IP requires reviewed configuration, never opening access to the Internet.
+- One AL2023 `t3.large` by default, worker minimum one and maximum two, encrypted 20 GiB gp3, IMDSv2/hop limit one, no SSH. The reviewed `capacity.auto.tfvars.json` pins desired workers to one; a later platform configuration PR may set two only after measuring Argo/controller/app requests, rollout headroom and cost. T3 standard credits avoid surplus-credit charges but can throttle sustained CPU use. No HA/autoscaler/Auto Mode.
+- Mandatory exact AMI release and four managed add-on versions. Examples deliberately contain invalid placeholders; synthetic test versions are not recommendations.
+- Separate cluster, worker, CNI and secret-sync roles. Standard AWS managed CNI permissions are not a custom least-privilege EC2 policy. Pod trust binds cluster/namespace/service-account tags. Only the explicit operator gets cluster-admin; app publisher gets no EKS access entry.
+- Metadata-only `rizz/staging/runtime` secret, default AWS-owned encryption, seven-day deletion recovery. Secret operator reads only this secret; no secret version/value in Terraform. Customer KMS keys would require separate policy review.
+- Three-day control-plane API/audit/authenticator logs. Default EKS API-data encryption is separate from encrypted worker disks; no additional KMS key created.
+
+## Ownership and order
+
+| Component | Owner |
+| --- | --- |
+| Network/EKS/workers/access/IAM/secret metadata | Terraform, this root; never app release CI |
+| CNI, kube-proxy, Pod Identity Agent, CoreDNS | Terraform EKS managed add-ons; no competing Helm owner |
+| Argo CD | Separate pinned platform-operator bootstrap release; same owner maintains upgrades, no self-management or Terraform Helm overlap in this milestone |
+| Load Balancer Controller / External Secrets Operator | Restricted Argo platform Application, cloud GitOps path |
+| SecretStore/ExternalSecret/Rizz workloads | Restricted app/platform Applications with explicit cloud destinations |
+| Secret values | Authorized operator in Secrets Manager; never Terraform/Git/Jev |
+
+Verify cluster/node/access first, bootstrap Argo, configure read-only private GitOps credentials and constrained AppProjects, install controllers, test identity/secret sync, then deploy application Ingress. Use `external-secrets/external-secrets` to match the Terraform Pod Identity. Operator port-forward is initial Argo access, not public ingress.
+
+Argo/controller values and generated AppProjects/Applications are now [prepared locally](../../../cloud-platform/README.md). This root also prepares a dedicated ALB-controller Pod Identity and narrowed versioned IAM policy. **Still unimplemented:** actual installations, reviewed publication of cloud GitOps paths, app release golden path and live verification. ESO IAM/association is code, not an installed operator. Verify actual ESO Pod Identity behavior. Terraform must not also own controller-created ALBs.
+
+Pre-compute add-ons and CNI Pod Identity depend on working reconciliation/identity-agent scheduling; CoreDNS follows the worker. Mock tests do not prove live ordering. Inspect live conditions during authorized provisioning; do not attach CNI permissions to all nodes ad hoc to hide a failed bootstrap.
+
+## Before a real plan
+
+Follow the [parent gates](../../README.md): numeric budget/window, account/state/legacy reconciliation, domain/HTTPS/access and reviewer decisions, scoped authorization. Confirm EKS support, available AZs, non-overlapping CIDR and exact compatible AMI/add-on pins in `us-east-1`. Example **future authorized read-only** queries:
+
+```bash
+aws eks describe-addon-versions --profile rizz-platform --region us-east-1 \
+  --kubernetes-version 1.35 --addon-name vpc-cni
+aws ssm get-parameter --profile rizz-platform --region us-east-1 \
+  --name /aws/service/eks/optimized-ami/1.35/amazon-linux-2023/x86_64/standard/recommended/release_version \
+  --query Parameter.Value --output text
+```
+
+Repeat add-on query for `kube-proxy`, `coredns`, `eks-pod-identity-agent`, verify compatibility and fill ignored private inputs. Verify node AMI architecture/release too; do not automatically accept a moving recommendation. These queries were not executed here.
+
+After backend verification and separate authorization, generate/review a saved real plan for this root. Inspect resource counts, IAM/access, actual regional prices and teardown readiness. Apply only with authorization bound to the exact unchanged plan. Mock success grants no apply authority.
+
+Local checks, no AWS APIs:
+
+```bash
+terraform -chdir=infra/aws/environments/staging init -backend=false -input=false
+terraform -chdir=infra/aws/environments/staging validate
+terraform -chdir=infra/aws/environments/staging test
+```
+
+Read [teardown](../../TEARDOWN.md) before provisioning. Sources checked: [EKS versions](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html), [endpoint access](https://docs.aws.amazon.com/eks/latest/userguide/cluster-endpoint.html), [Pod Identity trust](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-role.html), [session tags](https://docs.aws.amazon.com/eks/latest/userguide/pod-id-abac.html), [default encryption](https://docs.aws.amazon.com/eks/latest/userguide/envelope-encryption.html), [AMI metadata](https://docs.aws.amazon.com/eks/latest/userguide/retrieve-ami-id.html).

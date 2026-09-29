@@ -1,0 +1,14 @@
+aws_profile            = "rizz-platform"
+expected_account_id    = "000000000000"
+operator_principal_arn = "arn:aws:iam::000000000000:role/replace-with-reviewed-operator"
+operator_public_cidrs  = ["203.0.113.10/32"] # Documentation address; replace privately.
+availability_zones     = ["us-east-1a", "us-east-1b"] # Verify account availability.
+vpc_cidr               = "10.42.0.0/16" # Verify non-overlap with existing/VPN networks.
+# Intentionally INVALID placeholders: do not accidentally deploy guessed pins.
+addon_versions = {
+  vpc_cni            = "replace-after-compatibility-check"
+  kube_proxy         = "replace-after-compatibility-check"
+  coredns            = "replace-after-compatibility-check"
+  pod_identity_agent = "replace-after-compatibility-check"
+}
+node_ami_release_version = "REPLACE_WITH_VERIFIED_1.35_AL2023_RELEASE"

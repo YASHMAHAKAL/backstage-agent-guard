@@ -154,6 +154,40 @@ async function start(
 }
 
 describe('Agent Guard backend', () => {
+  it('authenticates read-only release browsing and does not invent releases', async () => {
+    const { server, scaffolder } = await start();
+    const url = '/api/agent-guard/rizz/releases';
+    await request(server)
+      .get(url)
+      .set('Authorization', mockCredentials.none.header())
+      .expect(401);
+    await request(server)
+      .get(url)
+      .set('Authorization', mockCredentials.service.header())
+      .expect(403);
+    const response = await request(server)
+      .get(url)
+      .set(
+        'Authorization',
+        mockCredentials.user.header('user:default/requester'),
+      )
+      .expect(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toEqual({
+      state: 'not_configured',
+      reason: 'trusted_publisher_not_connected',
+      items: [],
+    });
+    await request(server)
+      .post(url)
+      .set(
+        'Authorization',
+        mockCredentials.user.header('user:default/requester'),
+      )
+      .send({ release: 'fake' })
+      .expect(404);
+    expect(scaffolder.scaffold).not.toHaveBeenCalled();
+  });
   afterEach(async () => {
     await activeBackend?.stop();
     activeBackend = undefined;
@@ -341,7 +375,14 @@ describe('Agent Guard backend', () => {
       viewerPermissions: { canReview: false },
     });
     expect(created.body.snapshot.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
-    expect(created.body.snapshot.files).toHaveLength(4);
+    // Node.js uses the inline command recipe; unlike FastAPI it has no ConfigMap.
+    expect(
+      created.body.snapshot.files.map((file: { path: string }) => file.path),
+    ).toEqual([
+      'apps/staging/payments-api/catalog-info.yaml',
+      'apps/staging/payments-api/deployment.yaml',
+      'apps/staging/payments-api/service.yaml',
+    ]);
 
     const requesterDenied = await request(server)
       .post(`/api/agent-guard/proposals/${created.body.id}/decision`)
@@ -389,7 +430,7 @@ describe('Agent Guard backend', () => {
     expect(scaffolder.scaffold).toHaveBeenCalledWith(
       {
         templateRef: 'template:default/nodejs-api',
-        values: proposal.inputs,
+        values: { ...proposal.inputs, replicas: 1 },
       },
       { credentials: expect.anything() },
     );

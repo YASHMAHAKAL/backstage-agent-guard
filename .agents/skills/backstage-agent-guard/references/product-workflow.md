@@ -1,5 +1,7 @@
 # Product and user workflow
 
+Scope: the original Kind demo. For the approved Rizz.AI/EKS extension, use `cloud-architecture.md` and `cloud-workflows.md`. The two-repository scope and ingress restrictions below describe the local templates, not all future platform recipes.
+
 ## Purpose and actors
 
 This is a portfolio demonstration for platform engineering, DevOps, SRE, and cloud roles. It should make the governance boundary visible without attempting a production platform.

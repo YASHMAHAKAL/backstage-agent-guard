@@ -1,0 +1,4 @@
+# Copy to ignored terraform.tfvars; do not share actual identifiers in chat.
+aws_profile         = "rizz-platform"
+expected_account_id = "000000000000"
+state_bucket_name   = "rizz-platform-state-replace-with-unique-suffix"

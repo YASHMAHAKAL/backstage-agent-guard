@@ -2113,7 +2113,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@backstage/config@npm:^1.3.9":
+"@backstage/config@npm:^1.3.6, @backstage/config@npm:^1.3.9":
   version: 1.3.9
   resolution: "@backstage/config@npm:1.3.9"
   dependencies:
@@ -5488,15 +5488,19 @@ __metadata:
     "@backstage/backend-test-utils": "npm:^1.11.7"
     "@backstage/catalog-client": "npm:^1.16.2"
     "@backstage/cli": "npm:^0.36.6"
+    "@backstage/config": "npm:^1.3.6"
     "@backstage/errors": "npm:^1.3.1"
     "@backstage/plugin-catalog-node": "npm:^2.2.5"
     "@backstage/plugin-scaffolder-node": "npm:^0.13.7"
     "@backstage/types": "npm:^1.2.2"
     "@types/express": "npm:^4.17.6"
     "@types/supertest": "npm:^2.0.12"
+    "@types/yauzl": "npm:^2.10.3"
     express: "npm:^4.14.0"
     express-promise-router: "npm:^4.1.0"
     supertest: "npm:^6.2.4"
+    yaml: "npm:2.9.1"
+    yauzl: "npm:3.4.0"
     zod: "npm:^3.25.76 || ^4.0.0"
   languageName: unknown
   linkType: soft
@@ -5511,6 +5515,7 @@ __metadata:
     "@backstage/frontend-dev-utils": "npm:^0.1.6"
     "@backstage/frontend-plugin-api": "npm:^0.18.1"
     "@backstage/frontend-test-utils": "npm:^0.6.4"
+    "@backstage/plugin-catalog-react": "npm:^3.2.3"
     "@backstage/theme": "npm:^0.7.3"
     "@backstage/ui": "npm:^0.18.0"
     "@testing-library/jest-dom": "npm:^6.0.0"
@@ -12204,6 +12209,15 @@ __metadata:
   dependencies:
     "@types/yargs-parser": "npm:*"
   checksum: 10c0/609557826a6b85e73ccf587923f6429850d6dc70e420b455bab4601b670bfadf684b09ae288bccedab042c48ba65f1666133cf375814204b544009f57d6eef63
+  languageName: node
+  linkType: hard
+
+"@types/yauzl@npm:^2.10.3":
+  version: 2.10.3
+  resolution: "@types/yauzl@npm:2.10.3"
+  dependencies:
+    "@types/node": "npm:*"
+  checksum: 10c0/f1b7c1b99fef9f2fe7f1985ef7426d0cebe48cd031f1780fcdc7451eec7e31ac97028f16f50121a59bcf53086a1fc8c856fd5b7d3e00970e43d92ae27d6b43dc
   languageName: node
   linkType: hard
 
@@ -33127,19 +33141,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"yaml@npm:^1.10.0, yaml@npm:^1.10.2, yaml@npm:^1.7.2":
-  version: 1.10.3
-  resolution: "yaml@npm:1.10.3"
-  checksum: 10c0/c309ff85a0a569a981d71ab9cf0fef68672a16b9cdf40639d1c3b30034f6cd16ee428602bd6d64ecf006f8c8bee499023cac236538f79898aa99fb5db529a2ed
-  languageName: node
-  linkType: hard
-
-"yaml@npm:^2.0.0, yaml@npm:^2.2.1, yaml@npm:^2.2.2":
+"yaml@npm:2.9.1, yaml@npm:^2.0.0, yaml@npm:^2.2.1, yaml@npm:^2.2.2":
   version: 2.9.1
   resolution: "yaml@npm:2.9.1"
   bin:
     yaml: bin.mjs
   checksum: 10c0/9d06676ef02b89559a8b10a71882bd2cdae81e8393dc8dbc871615c3259475d9609ad973d19cb3c9e71e72d6206e3d1e7aa241c7e55f3d16fd2e77db305827d6
+  languageName: node
+  linkType: hard
+
+"yaml@npm:^1.10.0, yaml@npm:^1.10.2, yaml@npm:^1.7.2":
+  version: 1.10.3
+  resolution: "yaml@npm:1.10.3"
+  checksum: 10c0/c309ff85a0a569a981d71ab9cf0fef68672a16b9cdf40639d1c3b30034f6cd16ee428602bd6d64ecf006f8c8bee499023cac236538f79898aa99fb5db529a2ed
   languageName: node
   linkType: hard
 
@@ -33187,7 +33201,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"yauzl@npm:^3.2.1":
+"yauzl@npm:3.4.0, yauzl@npm:^3.2.1":
   version: 3.4.0
   resolution: "yauzl@npm:3.4.0"
   dependencies:

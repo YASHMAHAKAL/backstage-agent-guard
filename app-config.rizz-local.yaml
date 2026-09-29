@@ -1,0 +1,35 @@
+# Opt-in local source checkout onboarding. Load after other catalog overlays.
+# Arrays replace earlier arrays, so keep all existing Kind/demo locations.
+# Assumes Rizz.AI and backstage-agent-guard are sibling checkouts.
+catalog:
+  locations:
+    - type: file
+      target: ../../examples/entities.yaml
+    - type: file
+      target: ../../catalog/templates/nodejs-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/fastapi-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/scheduled-worker/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../examples/org.yaml
+      rules:
+        - allow: [User, Group]
+    - type: file
+      target: ../../examples/github-users.yaml
+      rules:
+        - allow: [User]
+    - type: file
+      target: ../../../Rizz.AI/catalog-info.yaml
+      rules:
+        - allow: [System, Component, API]
+    - type: file
+      target: ../../catalog/rizz-resources.yaml
+      rules:
+        - allow: [Resource]

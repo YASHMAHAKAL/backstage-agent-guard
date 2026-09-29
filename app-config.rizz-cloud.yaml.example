@@ -1,0 +1,79 @@
+# Private local copy only; NOT part of default startup. No resources are created
+# by loading config. Set enabled true only after the reviewed foundation, ready
+# ALB certificate bootstrap, real release CI and mapped reviewers exist.
+# Also load the filled rizz-releases overlay and GitHub auth configuration.
+agentGuard:
+  rizzCloud:
+    enabled: false
+    awsProfile: rizz-cloud-reader
+    githubToken: ${RIZZ_GITOPS_READ_TOKEN}
+    # Use only real mapped catalog users; submission is not approval authority.
+    submitterGroups: [group:default/rizz-team, group:default/platform-team]
+    # Independent observation: GitHub/Argo + read-only AWS/EKS/ECR and two
+    # ALB readiness GETs. No refresh/sync, inference or mutation is requested.
+    # awsProfile additionally needs namespace RBAC/EKS access and ECR manifest
+    # read permissions; see docs/rizz-ai-cloud-observation.md.
+    # Enable only against the DEDICATED EKS Argo, never the Kind port-forward.
+    delivery:
+      enabled: false
+      argoCdUrl: https://localhost:8443
+      argoCdToken: ${RIZZ_ARGO_READ_TOKEN}
+      argoCdCaBase64: ${RIZZ_ARGO_CA_BASE64}
+      # Dedicated Argo runs in this EKS cluster (prepare.mjs app destination).
+      destinationServer: https://kubernetes.default.svc
+    target:
+      id: eks-staging
+      accountId: '000000000000'
+      region: us-east-1
+      clusterName: rizz-eks-staging
+      namespace: rizz-staging
+      owner: group:default/platform-team
+      sourceRepository: example-owner/Rizz.AI
+      gitopsRepository: https://github.com/example-owner/gitops.git
+      gitopsBranch: main
+      gitopsPath: clusters/eks-staging/apps/rizz-ai
+      argoApplication: rizz-ai-staging
+      ingress:
+        stage: ready
+        hostname: rizz-staging-demo-1234567890.us-east-1.elb.amazonaws.com
+        operatorCidr: 203.0.113.10/32
+        certificateArn: arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000
+        certificateSha256: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+catalog:
+  # Catalog location arrays replace earlier overlays. Keep Kind, org and the
+  # Rizz.AI source/resource entries when this example is loaded last.
+  locations:
+    - type: file
+      target: ../../examples/entities.yaml
+    - type: file
+      target: ../../catalog/templates/nodejs-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/fastapi-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/scheduled-worker/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../examples/org.yaml
+      rules:
+        - allow: [User, Group]
+    - type: file
+      target: ../../examples/github-users.yaml
+      rules:
+        - allow: [User]
+    - type: file
+      target: ../../../Rizz.AI/catalog-info.yaml
+      rules:
+        - allow: [System, Component, API]
+    - type: file
+      target: ../../catalog/rizz-resources.yaml
+      rules:
+        - allow: [Resource]
+    - type: file
+      target: ../../catalog/templates/deploy-rizz-ai/template.yaml
+      rules:
+        - allow: [Template]

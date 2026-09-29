@@ -29,6 +29,15 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Group
 metadata:
+  name: rizz-team
+  description: Rizz.AI application owner; membership requires mapped real users.
+spec:
+  type: team
+  children: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
   name: payments-team
 spec:
   type: team

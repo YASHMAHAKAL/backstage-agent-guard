@@ -2,6 +2,14 @@
 
 A local portfolio project for governing an agent's service-deployment proposal before any GitOps change. Codex uses Backstage's official MCP Actions endpoint; Agent Guard validates the proposal, asks Jev to compare it with the agent-declared intent, and applies deterministic review routing. Backstage hosts the proposal and approval UI; an opt-in Scaffolder action can open a GitOps PR. A separate local Kind/Argo CD setup watches the merged GitOps branch.
 
+The [Rizz.AI IDP handoff](docs/rizz-ai-idp-handoff.md) maps the application,
+platform and GitOps repositories, explains the locally implemented lifecycle,
+and distinguishes it from AWS capabilities that have not been activated.
+The platform-only `/rizz-infrastructure` page records foundation requests and
+reviews runner-attested, sanitized saved-plan summaries when explicitly
+configured. It cannot create an infrastructure PR, run Terraform, or deploy to
+AWS; see the [infrastructure status](docs/rizz-ai-terraform-control-status.md).
+
 ## Current implementation
 
 - Official Backstage starter with the New Frontend System, Catalog, Scaffolder, and MCP Actions.
@@ -34,6 +42,29 @@ node --env-file-if-exists=.env .yarn/releases/yarn-4.13.0.cjs start
 
 Open `http://localhost:3000/agent-guard`. The MCP endpoint is `http://localhost:7007/api/mcp-actions/v1`. For real Jev evaluations, set `TYPESAFE_API_KEY` in the backend process environment. Keep it out of committed files and screenshots.
 
+For regular development, use the named startup profiles instead of repeating
+`--config` flags:
+
+| Command                                                     | Configuration loaded                                                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `node .yarn/releases/yarn-4.13.0.cjs start`                 | Base guest demo only                                                                                           |
+| `node .yarn/releases/yarn-4.13.0.cjs start:github`          | GitHub sign-in                                                                                                 |
+| `node .yarn/releases/yarn-4.13.0.cjs start:portal`          | GitHub sign-in, Kind GitOps publishing, Rizz.AI Catalog/Control Center                                         |
+| `node .yarn/releases/yarn-4.13.0.cjs start:portal:kind`     | Portal plus opt-in read-only Kind Kubernetes view; supply fresh `AGENT_GUARD_K8S_*` values                     |
+| `node .yarn/releases/yarn-4.13.0.cjs start:portal:releases` | Portal plus the private Rizz.AI release-source overlay                                                         |
+| `node .yarn/releases/yarn-4.13.0.cjs start:portal:cloud`    | Portal plus private, reviewed Rizz.AI release/cloud overlays; use only when both local overlays are configured |
+
+These scripts use [Backstage's configuration loading](https://backstage.io/docs/conf/), including `BACKSTAGE_ENV`, which
+automatically loads `app-config.yaml`, each named `app-config.<name>.yaml`, and
+their optional `.local.yaml` counterparts. The ignored `app-config.local.yaml`
+is available for machine-specific overrides. Keep credentials in the ignored
+`.env`/`.env.delivery.local` files or a secret store; the scripts load those
+files without passing secret values as config flags. `start:portal` does not
+enable the cloud target or provision anything. Its GitOps publisher still
+requires the existing `GITHUB_TOKEN` and `AGENT_GUARD_GITOPS_REPO_URL` values.
+Because Backstage replaces configuration arrays rather than appending them,
+the last Rizz.AI catalog profile carries the complete local catalog locations.
+
 To submit without Codex, sign in to Backstage, select **Agent Guard → New proposal**, choose one of the three trusted templates, and enter declared intent, service name, an existing `group:default/...` owner, and a description. API templates also accept `1` or `2` replicas; the worker instead needs a five-field cron schedule. Submitting runs validation and Jev, then creates a frozen proposal for a _different_ owner-group member to review. It never starts Scaffolder or opens a PR by itself. The Catalog `/create` page remains for viewing platform templates, not bypassing Agent Guard approval.
 
 The default `guest-demo` mode uses one shared identity. It can submit and inspect proposals, but **cannot approve its own proposal** under the distinct-reviewer policy. Static service tokens are intentionally not accepted by the proposal backend as developer identities.
@@ -42,7 +73,7 @@ The default `guest-demo` mode uses one shared identity. It can submit and inspec
 
 1. Create a GitHub OAuth App with homepage `http://localhost:3000` and callback `http://localhost:7007/api/auth/github/handler/frame`. Put its `AUTH_GITHUB_CLIENT_ID` and `AUTH_GITHUB_CLIENT_SECRET` in your ignored `.env` file.
 2. Copy [examples/github-users.example.yaml](examples/github-users.example.yaml) to the ignored `examples/github-users.yaml` and replace each `github.com/user-id` placeholder with the account's immutable GitHub `node_id` (from `https://api.github.com/users/<login>`). Use **two different accounts**: one requester and one reviewer. The reviewer must belong to the requested owner group. Treat the local catalog file as platform-owned, not agent-writable.
-3. Start with `AGENT_GUARD_AUTH_MODE=github node --env-file-if-exists=.env .yarn/releases/yarn-4.13.0.cjs start --config ../../app-config.yaml --config ../../app-config.github.yaml`, then sign in through GitHub. The paths are relative to each workspace package because `repo start` forwards them to both app and backend. The overlay selects GitHub sign-in and disables the guest provider; a mode/config mismatch fails instead of falling back to shared guest login.
+3. Run `node .yarn/releases/yarn-4.13.0.cjs start:github`, then sign in through GitHub. The profile selects GitHub sign-in and disables the guest provider; a mode/config mismatch fails instead of falling back to shared guest login.
 4. Submit a proposal as `developer`. The same user must receive HTTP 403 on the decision endpoint; sign in as the distinct `reviewer` to approve or reject.
 
 The review endpoint checks distinct Backstage user identities and owner-group membership, not cryptographic proof that a particular browser click was human. An agent holding a **reviewer's** credential could still act as that reviewer. Do not give the agent reviewer credentials. GitHub OAuth setup and a two-account live approval have not been exercised by automated tests; those tests use mocked users.
@@ -51,22 +82,18 @@ The review endpoint checks distinct Backstage user identities and owner-group me
 
 1. Create a separate GitHub repository named `backstage-agent-guard-gitops` under your account, with a `main` branch. The repository and access token must be owned/configured by the platform operator, not supplied by the agent. Do not put the token in templates or proposals.
 2. Add `GITHUB_TOKEN=<token>` and `AGENT_GUARD_GITOPS_REPO_URL=github.com?owner=<your-github-owner>&repo=backstage-agent-guard-gitops` to your ignored `.env` file. Use a GitHub token with the repository permissions needed to create branches/contents and pull requests. Keep `AUTH_GITHUB_CLIENT_ID`, `AUTH_GITHUB_CLIENT_SECRET`, and `TYPESAFE_API_KEY` there too if using the real two-person/Jev path.
-3. Start in GitHub auth mode with the opt-in GitHub integration overlay:
+3. Start the portal profile, which includes the GitHub integration overlay:
 
 ```sh
-AGENT_GUARD_AUTH_MODE=github node --env-file-if-exists=.env .yarn/releases/yarn-4.13.0.cjs start --config ../../app-config.yaml --config ../../app-config.github.yaml --config ../../app-config.gitops.yaml
+node .yarn/releases/yarn-4.13.0.cjs start:portal
 ```
 
 For a local test when GitHub CLI is already authenticated with repository access, you can keep the GitHub token out of `.env` and supply it only to this server process:
 
 ```sh
-AGENT_GUARD_AUTH_MODE=github \
 AGENT_GUARD_GITOPS_REPO_URL='github.com?owner=YASHMAHAKAL&repo=backstage-agent-guard-gitops' \
 GITHUB_TOKEN="$(gh auth token)" \
-node --env-file-if-exists=.env .yarn/releases/yarn-4.13.0.cjs start \
-  --config ../../app-config.yaml \
-  --config ../../app-config.github.yaml \
-  --config ../../app-config.gitops.yaml
+node .yarn/releases/yarn-4.13.0.cjs start:portal
 ```
 
 4. Submit a **new** proposal, review the frozen repository/path/files/digest in Backstage, and approve it from the distinct owner account. Refresh Agent Guard to see `pr_open` and its PR link. Merge the PR yourself as a separate release decision; Backstage approval never merges it.
@@ -92,14 +119,9 @@ kubectl --context kind-agent-guard -n argocd port-forward --address 127.0.0.1 sv
 Then start Backstage from this directory with GitHub sign-in and both ignored env files:
 
 ```sh
-AGENT_GUARD_AUTH_MODE=github \
 AGENT_GUARD_GITOPS_REPO_URL='github.com?owner=YASHMAHAKAL&repo=backstage-agent-guard-gitops' \
 GITHUB_TOKEN="$(gh auth token)" \
-node --env-file-if-exists=.env --env-file-if-exists=.env.delivery.local \
-  .yarn/releases/yarn-4.13.0.cjs start \
-  --config ../../app-config.yaml \
-  --config ../../app-config.github.yaml \
-  --config ../../app-config.gitops.yaml
+node .yarn/releases/yarn-4.13.0.cjs start:portal
 ```
 
 Sign in at `http://localhost:3000/agent-guard`, open `gitops-pr-demo-api`, and press Refresh. The recorded `pr_open` state and the read-only merged/deployed observation are intentionally distinct. If the port-forward stops, the panel must say Argo CD is unavailable, not that the deployment succeeded. After the documented Application migration, this one shared Application can observe each approved service's individual workload; an Application revision may include later merged services, so the observer checks that it contains the proposal's approved merge.
@@ -116,18 +138,12 @@ kubectl --context kind-agent-guard apply \
 Then restart Backstage with the Kubernetes overlay. The command derives the Kind API URL and CA from the local kubeconfig and obtains a short-lived ServiceAccount token without writing it to `.env` or printing it. Keep the token out of chat and source control.
 
 ```sh
-AGENT_GUARD_AUTH_MODE=github \
 AGENT_GUARD_GITOPS_REPO_URL='github.com?owner=<your-github-owner>&repo=backstage-agent-guard-gitops' \
 GITHUB_TOKEN="$(gh auth token)" \
 AGENT_GUARD_K8S_URL="$(kubectl --context kind-agent-guard config view --raw --minify -o jsonpath='{.clusters[0].cluster.server}')" \
 AGENT_GUARD_K8S_CA_DATA="$(kubectl --context kind-agent-guard config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')" \
 AGENT_GUARD_K8S_TOKEN="$(kubectl --context kind-agent-guard -n staging create token backstage-kubernetes-reader --duration=24h)" \
-node --env-file-if-exists=.env --env-file-if-exists=.env.delivery.local \
-  .yarn/releases/yarn-4.13.0.cjs start \
-  --config ../../app-config.yaml \
-  --config ../../app-config.github.yaml \
-  --config ../../app-config.gitops.yaml \
-  --config ../../app-config.kubernetes.yaml
+node .yarn/releases/yarn-4.13.0.cjs start:portal:kind
 ```
 
 Open a merged service in Catalog and choose **Kubernetes**. The resource labels and Catalog annotations generated for new services make the tab show only that service's staging objects. Existing demo objects have been labelled in the local Kind cluster. If the 24-hour token expires, restart with the same command.

@@ -1,0 +1,14 @@
+clusterName: rizz-eks-staging
+region: us-east-1
+# vpcId is injected from reviewed operator configuration, never IMDS discovery.
+replicaCount: 1
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+enableShield: false
+enableWaf: false
+enableWafv2: false
+enableServiceMutatorWebhook: false
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 256Mi }

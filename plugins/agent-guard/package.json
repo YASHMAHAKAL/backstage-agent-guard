@@ -27,6 +27,7 @@
   "dependencies": {
     "@backstage/core-components": "^0.18.14",
     "@backstage/frontend-plugin-api": "^0.18.1",
+    "@backstage/plugin-catalog-react": "^3.2.3",
     "@backstage/theme": "^0.7.3",
     "@backstage/ui": "^0.18.0",
     "react-use": "^17.2.4"

@@ -1,0 +1,14 @@
+aws_profile         = "rizz-platform"
+expected_account_id = "000000000000"
+github_repository   = "example-owner/Rizz.AI"
+github_branch       = "master"
+# Verify whether your repository uses immutable-ID subjects before planning.
+github_oidc_subject = "repo:example-owner/Rizz.AI:ref:refs/heads/master"
+# Do not default to creating an account-wide provider. Inspect first.
+create_github_oidc_provider       = false
+existing_github_oidc_provider_arn = "arn:aws:iam::000000000000:oidc-provider/token.actions.githubusercontent.com"
+# Placeholders, NOT a user-approved budget or real alert recipient.
+budget_limit_usd = 5
+budget_email     = "replace@example.invalid"
+# Optional, separately reviewed reader role; fill a non-root IAM principal.
+release_reader_principal_arn = null

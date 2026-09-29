@@ -1,0 +1,4 @@
+# Copy to ignored state.backend.hcl only AFTER authorized bucket bootstrap.
+bucket              = "rizz-platform-state-replace-with-unique-suffix"
+profile             = "rizz-platform"
+allowed_account_ids = ["000000000000"]

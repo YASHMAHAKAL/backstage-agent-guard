@@ -1,5 +1,7 @@
 # Architecture and decision rules
 
+The trust and approval rules here apply to both modes. References to Kind, three templates, no public ingress, and fixed demo images describe the local recipes. The Rizz.AI cloud recipe has separately defined exposure and release rules in `cloud-architecture.md` and `cloud-workflows.md`; its accepted lifecycle/roles/Terraform extension is in the `rizz-idp-*` references. Do not relax the existing local templates to implement it.
+
 ## Data flow
 
 ```text
@@ -49,10 +51,10 @@ Implement a pure function over validated facts, authenticated identity, catalog 
 1. Deny malformed input, unsupported template/environment, unauthorized caller, unsafe target, or arbitrary code/configuration.
 2. Hold or deny when required identity/catalog context is missing. Jev cannot fill an authorization gap.
 3. Deny unsupported capabilities such as public ingress, irrespective of Jev.
-4. For allowed staging requests, require a distinct member of the requested owner group to review; the requester cannot approve their own proposal, even when they belong to that group.
+4. For allowed Kind staging requests, require a distinct member of the requested owner group to review. Rizz.AI uses operation-specific application/platform reviewer rules in `rizz-idp-lifecycle.md`. The requester cannot approve their own proposal, even when they belong to an authorized reviewer group.
 5. If semantic analysis finds a material mismatch, scope expansion, ambiguity, or fails, prevent automatic progression and request correction or human examination. Jev cannot lower a review requirement.
 
-Read-only status access remains scoped to authorized proposal viewers. The shared guest identity is only for proposal/UI exploration: it cannot review, and its proposals cannot later be approved after real auth is enabled. Production deployment is outside the runnable local MVP; show unsupported/review-only behavior rather than suggesting a production cluster exists. If production is added later, require platform review. Destructive templates are outside the initial scope.
+Read-only status access remains scoped to authorized proposal viewers. The shared guest identity is only for proposal/UI exploration: it cannot review, and its proposals cannot later be approved after real auth is enabled. Production deployment is outside the runnable local MVP; show unsupported/review-only behavior rather than suggesting a production cluster exists. If production is added later, require platform review. Destructive actions remain outside Kind's initial scope; Rizz.AI retirement and infrastructure destroy are dedicated platform-reviewed workflows with explicit resource ownership and deletion evidence.
 
 ## Jev's job
 
