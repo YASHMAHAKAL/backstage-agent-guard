@@ -52,8 +52,19 @@ metadata and the current approved receipt, accept redacted plan registration,
 and store a runner-reported outcome. The opt-in separate
 `scripts/terraform-runner.cjs` connects these pieces but has not been run
 against AWS or deployed to CI. No live AWS or Terraform command has been run.
-Independent result observation remains to be wired before an Apply/Destroy
-portal control can be enabled.
+An opt-in, read-only AWS inventory endpoint is now wired behind authenticated
+platform-team membership. With a dedicated
+`AGENT_GUARD_TERRAFORM_OBSERVER_PROFILE` in the Backstage backend environment,
+the portal can refresh fixed resource checks after verifying the expected AWS
+account: EKS cluster and managed node group for staging, or both ECR
+repositories and the image-publisher role for registry. Without that profile
+it says `not_configured`; wrong-account, access and CLI failures say
+`unavailable`, not absent. It does not inspect Terraform state, VPC/NAT/ALB,
+controller readiness, drift, or app deployment, and cannot turn a runner's
+success report into foundation readiness. This is only partial independent
+inventory, tested with stubbed AWS responses; no live AWS observation is
+claimed. Full independent result observation remains outstanding before any
+Apply/Destroy portal control can be enabled.
 
 The Backstage plugin now persists authenticated platform-team foundation and
 capacity requests and accepts a sanitized plan summary only from a Backstage service
@@ -78,7 +89,7 @@ GitHub read token, distinct runner and approval keys, expected AWS account ID,
 fixed runner ID), this area reports disabled.
 Do not enable it with development keys or claim an executable infrastructure
 workflow: protected runner deployment/dispatch, the actual state-bucket
-bootstrap, independent run observation, drift and
+bootstrap, full independent run observation, drift and
 teardown controls are still outstanding. The operator handoff is in
 `docs/rizz-ai-terraform-runner.md`.
 

@@ -55,6 +55,17 @@ beforeEach(() => {
     }
     if (url.endsWith('/requests'))
       return { ok: true, json: async () => ({ items: requests }) };
+    if (url.endsWith(`/${id}/aws-observation`))
+      return {
+        ok: true,
+        json: async () => ({
+          state: 'observed',
+          root: 'staging',
+          scope: 'partial_inventory',
+          observedAt: '2026-09-29T00:00:00.000Z',
+          checks: [{ name: 'EKS cluster', observed: true, detail: 'ACTIVE' }],
+        }),
+      };
     throw new Error(`Unexpected endpoint ${url}`);
   });
 });
@@ -103,5 +114,39 @@ it('hides capacity controls when policy evidence has not activated them', async 
   );
   expect(
     screen.queryByRole('option', { name: /Staging node capacity/ }),
+  ).not.toBeInTheDocument();
+});
+
+it('labels independent inventory as partial and never as applied', async () => {
+  requests = [
+    {
+      id,
+      status: 'runner_reported_applied',
+      requester: 'user:default/platform',
+      createdAt: '2026-09-29T00:00:00.000Z',
+      request: {
+        operation: 'foundation_setup',
+        root: 'staging',
+        declaredIntent: 'Create the reviewed staging foundation.',
+      },
+      runnerOutcome: {
+        runId: id,
+        status: 'applied',
+        reportedAt: '2026-09-29T00:00:00.000Z',
+      },
+      canReview: false,
+      executable: false,
+    },
+  ];
+  render(<RizzInfrastructurePage />);
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Refresh AWS inventory' }),
+  );
+  expect(await screen.findByText(/EKS cluster: observed/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/do not prove Terraform drift-free state/),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: /Apply Terraform/ }),
   ).not.toBeInTheDocument();
 });

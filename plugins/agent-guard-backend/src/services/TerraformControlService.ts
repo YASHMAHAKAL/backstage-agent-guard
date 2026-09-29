@@ -29,6 +29,7 @@ import {
   CapacityPr,
   TerraformCapacityPublisher,
 } from '../terraformCapacityPublisher';
+import { TerraformAwsReader } from '../terraformObservation';
 
 type Client = Awaited<ReturnType<DatabaseService['getClient']>>;
 const platformGroup = 'group:default/platform-team';
@@ -157,6 +158,7 @@ export class TerraformControlService {
       expectedRunnerId: string;
       configurationReader: TerraformConfigurationReader;
       capacityPublisher?: TerraformCapacityPublisher;
+      awsObserver?: TerraformAwsReader;
     },
   ) {}
 
@@ -171,6 +173,7 @@ export class TerraformControlService {
     expectedRunnerId: string;
     configurationReader: TerraformConfigurationReader;
     capacityPublisher?: TerraformCapacityPublisher;
+    awsObserver?: TerraformAwsReader;
   }) {
     if (
       options.runnerKey.length < 32 ||
@@ -385,6 +388,16 @@ export class TerraformControlService {
   async get(id: string, credentials: BackstageCredentials) {
     const viewer = await this.platformUser(credentials);
     return this.publicView(await this.load(id), viewer);
+  }
+
+  /** An independent but deliberately partial AWS inventory. Never treat a
+   * runner callback or this subset of resources as deployment proof. */
+  async observe(id: string, credentials: BackstageCredentials) {
+    await this.platformUser(credentials);
+    const record = await this.load(id);
+    if (!this.options.awsObserver)
+      return { state: 'not_configured' as const, root: record.request.root };
+    return this.options.awsObserver.observe(record.request.root);
   }
 
   /** Service-only immutable request description for the designated runner.

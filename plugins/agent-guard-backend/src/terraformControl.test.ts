@@ -15,6 +15,7 @@ import request from 'supertest';
 import { createAgentGuardPlugin } from './plugin';
 import { canonicalize } from './snapshot';
 import { terraformBindingDigest } from './terraformPlan';
+import { TerraformAwsReader } from './terraformObservation';
 
 const runnerKey = Buffer.alloc(32, 7);
 const approvalKey = Buffer.alloc(32, 8);
@@ -56,7 +57,10 @@ afterEach(async () => {
   else process.env.AGENT_GUARD_AUTH_MODE = initialAuthMode;
 });
 
-async function start(withCapacityPublisher = false) {
+async function start(
+  withCapacityPublisher = false,
+  awsObserver?: TerraformAwsReader,
+) {
   process.env.AGENT_GUARD_AUTH_MODE = 'github';
   const configurationReader = {
     verifyMergedReview: jest.fn().mockResolvedValue(true),
@@ -119,6 +123,7 @@ async function start(withCapacityPublisher = false) {
           expectedAccountId: '000000000000',
           expectedRunnerId: 'terraform-runner-staging',
           configurationReader,
+          ...(awsObserver ? { awsObserver } : {}),
           ...(withCapacityPublisher ? { capacityPublisher } : {}),
         },
       }),
@@ -184,6 +189,41 @@ function planMessage(id: string) {
 }
 
 describe('platform Terraform request and plan review gate', () => {
+  it('limits read-only AWS observation to platform users', async () => {
+    const observe = jest.fn().mockResolvedValue({
+      state: 'observed',
+      root: 'staging',
+      observedAt: '2026-09-29T00:00:00.000Z',
+      scope: 'partial_inventory',
+      checks: [{ name: 'EKS cluster', observed: true }],
+    });
+    const { server } = await start(false, { observe });
+    const submitted = await foundationRequest(server);
+    expect(submitted.status).toBe(201);
+    const endpoint = `${base}/requests/${submitted.body.id}/aws-observation`;
+    await request(server)
+      .get(endpoint)
+      .set('Authorization', header('outsider'))
+      .expect(403);
+    expect(observe).not.toHaveBeenCalled();
+    const response = await request(server)
+      .get(endpoint)
+      .set('Authorization', header('reviewer'))
+      .expect(200);
+    expect(response.body.scope).toBe('partial_inventory');
+    expect(observe).toHaveBeenCalledWith('staging');
+  });
+
+  it('does not invent an AWS result when observation is not configured', async () => {
+    const { server } = await start();
+    const submitted = await foundationRequest(server);
+    const response = await request(server)
+      .get(`${base}/requests/${submitted.body.id}/aws-observation`)
+      .set('Authorization', header('reviewer'))
+      .expect(200);
+    expect(response.body).toEqual({ state: 'not_configured', root: 'staging' });
+  });
+
   it('publishes only an authenticated bounded capacity PR and binds the saved plan to it', async () => {
     const { server, capacityPublisher, configurationReader } = await start(
       true,

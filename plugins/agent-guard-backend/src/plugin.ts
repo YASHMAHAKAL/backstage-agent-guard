@@ -32,6 +32,10 @@ import {
   GitHubTerraformCapacityPublisher,
   TerraformCapacityPublisher,
 } from './terraformCapacityPublisher';
+import {
+  AwsCliTerraformObserver,
+  TerraformAwsReader,
+} from './terraformObservation';
 
 export function createAgentGuardPlugin(
   options: {
@@ -48,6 +52,7 @@ export function createAgentGuardPlugin(
       expectedRunnerId: string;
       configurationReader: TerraformConfigurationReader;
       capacityPublisher?: TerraformCapacityPublisher;
+      awsObserver?: TerraformAwsReader;
     };
   } = {},
 ) {
@@ -136,6 +141,16 @@ export function createAgentGuardPlugin(
           ];
           if (terraformEnv.some(Boolean) && !terraformEnv.every(Boolean))
             throw new Error('Incomplete Terraform control configuration');
+          const observerProfile =
+            process.env.AGENT_GUARD_TERRAFORM_OBSERVER_PROFILE;
+          if (
+            observerProfile &&
+            (!terraformEnv.every(Boolean) ||
+              observerProfile === process.env.AGENT_GUARD_TERRAFORM_AWS_PROFILE)
+          )
+            throw new Error(
+              'Terraform observation needs configured controls and a separate read-only AWS profile',
+            );
           const capacityWriteToken =
             process.env.AGENT_GUARD_TERRAFORM_GITHUB_WRITE_TOKEN;
           const capacityActivation =
@@ -183,6 +198,14 @@ export function createAgentGuardPlugin(
                     repo: terraformRepo[2],
                     token: terraformEnv[1]!,
                   }),
+                  ...(observerProfile
+                    ? {
+                        awsObserver: new AwsCliTerraformObserver({
+                          profile: observerProfile,
+                          expectedAccountId: terraformEnv[4]!,
+                        }),
+                      }
+                    : {}),
                   ...(capacityWriteToken
                     ? {
                         capacityPublisher: new GitHubTerraformCapacityPublisher(

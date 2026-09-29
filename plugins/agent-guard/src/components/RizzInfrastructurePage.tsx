@@ -75,6 +75,13 @@ type Request = {
   canReview: boolean;
   executable: false;
 };
+type AwsObservation = {
+  state: 'not_configured' | 'observed' | 'incomplete' | 'unavailable';
+  root: 'registry' | 'staging';
+  observedAt?: string;
+  scope?: 'partial_inventory';
+  checks?: Array<{ name: string; observed: boolean; detail?: string }>;
+};
 
 const requestTitle = (item: Request) =>
   item.request.operation === 'capacity_change'
@@ -97,6 +104,10 @@ export function RizzInfrastructurePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [accessDenied, setAccessDenied] = useState(false);
+  const [observation, setObservation] = useState<{
+    requestId: string;
+    result: AwsObservation;
+  } | null>(null);
   const selected = requests.find(item => item.id === selectedId);
 
   const refresh = useCallback(async () => {
@@ -212,6 +223,28 @@ export function RizzInfrastructurePage() {
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Decision failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function observeAws() {
+    if (!selected) return;
+    const requestId = selected.id;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(
+        `plugin://agent-guard/rizz/terraform/requests/${requestId}/aws-observation`,
+      );
+      if (!response.ok)
+        throw new Error(`AWS observation failed (${response.status})`);
+      setObservation({
+        requestId,
+        result: (await response.json()) as AwsObservation,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Observation failed');
     } finally {
       setBusy(false);
     }
@@ -353,6 +386,7 @@ export function RizzInfrastructurePage() {
                         onClick={() => {
                           setSelectedId(item.id);
                           setAcknowledged(false);
+                          setObservation(null);
                         }}
                         type="button"
                       >
@@ -526,6 +560,37 @@ export function RizzInfrastructurePage() {
                       independent AWS readiness verification.
                     </p>
                   )}
+                  <div className="ag-infra-observation">
+                    <h3>Independent AWS inventory</h3>
+                    <p>
+                      Read-only, partial checks in the expected account. These
+                      do not prove Terraform drift-free state or app readiness.
+                    </p>
+                    <button
+                      disabled={busy}
+                      onClick={() => void observeAws()}
+                      type="button"
+                    >
+                      Refresh AWS inventory
+                    </button>
+                    {observation?.requestId === selected.id && (
+                      <div role="status">
+                        <p>
+                          <strong>Observation:</strong>{' '}
+                          {observation.result.state.replaceAll('_', ' ')}
+                          {observation.result.observedAt &&
+                            ` at ${observation.result.observedAt}`}
+                        </p>
+                        {observation.result.checks?.map(check => (
+                          <p key={check.name}>
+                            {check.name}:{' '}
+                            {check.observed ? 'observed' : 'not healthy'}
+                            {check.detail ? ` (${check.detail})` : ''}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </section>
@@ -533,8 +598,8 @@ export function RizzInfrastructurePage() {
         )}
       <p className="ag-infra-footnote">
         Apply, destroy, drift remediation and AWS deployment are unavailable
-        here. A separate protected runner and independent status observation
-        must be connected first.
+        here. Inventory is read-only and partial; a separate protected runner
+        and full independent readiness checks are still required.
       </p>
     </div>
   );

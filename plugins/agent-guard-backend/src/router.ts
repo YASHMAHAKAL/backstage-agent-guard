@@ -72,6 +72,16 @@ export function createRouter(options: {
     res.set('Cache-Control', 'no-store');
     res.json(await terraform().get(req.params.id, credentials));
   });
+  router.get(
+    '/rizz/terraform/requests/:id/aws-observation',
+    async (req, res) => {
+      const credentials = await options.httpAuth.credentials(req, {
+        allow: ['user'],
+      });
+      res.set('Cache-Control', 'no-store');
+      res.json(await terraform().observe(req.params.id, credentials));
+    },
+  );
   router.post(
     '/rizz/terraform/requests/:id/configuration-pr',
     async (req, res) => {

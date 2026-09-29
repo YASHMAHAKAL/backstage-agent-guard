@@ -16,6 +16,15 @@ account, S3 and Terraform's backend; `apply` would modify AWS. Neither
 command is part of normal Backstage startup, and this document is not
 authorization to run them. No `.env` token or private plan belongs in Git.
 
+The platform repository is private on GitHub Free. GitHub's required
+environment reviewers are not available for private repositories on that
+plan ([GitHub deployment-environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
+Do not describe an unprotected Actions dispatch as a two-person apply gate.
+Until a different repository/plan or stronger runner setup is chosen, the
+honest path is a separately credentialed local operator runner that consumes
+Backstage's exact-plan approval receipt. The local adapter exists, but the
+credential boundary and live end-to-end authorization have not been verified.
+
 The runner requires a clean checkout at the reviewed merge commit, an owned
 mode-0700 artifact directory **outside** that checkout, fixed
 `state.backend.hcl` and private `terraform.tfvars` in the selected root, and
@@ -71,8 +80,13 @@ activation phrase. It fetches the current receipt again, checks the plan bytes,
 source, account, variables, backend, state, reviewer membership and expiry,
 and consumes a durable single-use local claim before running `terraform
 apply <saved-plan>`. Failed or interrupted execution is `unknown`, not an
-automatic retry. The backend stores the runner's report, while independent
-AWS inventory/readiness observation remains future work.
+automatic retry. The backend stores the runner's report. Optional independent
+AWS inventory is now a partial, read-only portal check: configure a separate
+read-only AWS profile with `AGENT_GUARD_TERRAFORM_OBSERVER_PROFILE` only after
+verifying its permissions and expected account; do not reuse the apply
+profile. The check covers fixed EKS/node-group or ECR/publisher-role resources.
+It is not drift detection, an application health check, a teardown inventory,
+or proof of complete foundation readiness.
 
 ## First-state and teardown boundary
 
