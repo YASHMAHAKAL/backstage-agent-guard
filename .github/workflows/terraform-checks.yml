@@ -68,6 +68,7 @@ jobs:
         with:
           node-version: '22'
       - run: node .yarn/releases/yarn-4.13.0.cjs install --immutable
+      - run: node .yarn/releases/yarn-4.13.0.cjs tsc:full
       - run: node .yarn/releases/yarn-4.13.0.cjs workspace @internal/backstage-plugin-agent-guard-backend build
       - run: node --test scripts/terraform-ci-inputs.test.cjs scripts/terraform-runner.test.cjs
       - run: >-

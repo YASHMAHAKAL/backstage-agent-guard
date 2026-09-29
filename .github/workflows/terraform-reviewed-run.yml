@@ -76,6 +76,7 @@ jobs:
       - name: Build the reviewed runner library
         run: |
           node .yarn/releases/yarn-4.13.0.cjs install --immutable
+          node .yarn/releases/yarn-4.13.0.cjs tsc:full
           node .yarn/releases/yarn-4.13.0.cjs workspace @internal/backstage-plugin-agent-guard-backend build
       - name: Prepare private registry inputs
         if: ${{ inputs.root == 'registry' }}
