@@ -36,10 +36,24 @@ pull-request workflow with AWS authority.
 ## Non-deploying sequence
 
 1. An authenticated platform member records a `foundation_setup` request.
-2. A platform-owned Terraform configuration PR is reviewed by a different
-   person and merged to `main`. The PR must change the selected root. This
-   step is still **manual**: the current fixed setup request contains no
-   meaningful Terraform delta for an automatic publisher.
+2. For foundation setup, a platform owner authors a meaningful Terraform
+   configuration PR. For staging capacity, a platform requester uses the
+   Backstage form to open an exact one-file PR. Both require a different
+   human GitHub reviewer and merge to `main`; neither is plan approval. The
+   capacity form is disabled until the operator supplies a separate
+   `AGENT_GUARD_TERRAFORM_GITHUB_WRITE_TOKEN`, the activation phrase
+   `YES-REVIEWED-MEASURED-CAPACITY` via
+   `AGENT_GUARD_TERRAFORM_CAPACITY_ACTIVATION`, and a reviewed HTTPS report
+   URL via `AGENT_GUARD_TERRAFORM_CAPACITY_EVIDENCE_URL`. The report must
+   cover controller/app requests, rollout headroom, capacity and current cost.
+   The backend validates the URL's presence and scheme, not the measurements;
+   activation is an operator attestation, not automated cost enforcement.
+   The writer needs only the platform repository's Contents and Pull Requests
+   permissions; do not reuse the app release publisher token. Protect `main`
+   and require platform code-owner review in GitHub. The local reader verifies
+   a distinct approving GitHub login and current `main`, but does not replace
+   repository branch protection or prove that an arbitrary GitHub reviewer is
+   in the Backstage platform group.
 3. Once an operator has provisioned and verified the state bucket and backend
    credentials, the designated runner can fetch the pending request, verify
    the PR/current merge, check the account and exact S3 state key, then create
@@ -67,7 +81,8 @@ operator first; no runner can bootstrap its own missing backend. Preserve its
 versioning/encryption/lock policy and capture the bootstrap plan and outputs.
 For teardown, retire the application and verify controller-owned ALB removal
 before any separately approved staging destroy. This runner script currently
-accepts only `foundation_setup` plans; it does not offer a destroy command.
+accepts foundation setup and bounded capacity plans; it does not offer a
+destroy command.
 
 The user-agreed US$5/four-hour checkpoint is an operating constraint, not a
 hard cap. Re-estimate before any live plan/apply and arrange teardown before

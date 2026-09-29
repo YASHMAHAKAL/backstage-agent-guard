@@ -66,8 +66,12 @@ export async function prepareTerraformSavedPlan(options: {
   request: {
     id: string;
     requester: string;
-    operation: 'foundation_setup';
+    operation: 'foundation_setup' | 'capacity_change';
     root: 'registry' | 'staging';
+    desiredWorkers?: number;
+    previousWorkers?: number;
+    configurationPrUrl?: string;
+    configurationPrHeadCommit?: string;
   };
   configurationPr: { url: string; mergedCommit: string };
   checkoutDirectory: string;
@@ -81,6 +85,9 @@ export async function prepareTerraformSavedPlan(options: {
     pullRequest: { url: string; mergedCommit: string };
     sourceCommit: string;
     root: 'registry' | 'staging';
+    requesterRef: string;
+    capacityDesiredWorkers?: number;
+    capacityPrHeadCommit?: string;
   }) => Promise<boolean>;
   registerPlan: (
     message: ReturnType<typeof createTerraformPlanRegistration>,
@@ -103,6 +110,23 @@ export async function prepareTerraformSavedPlan(options: {
     .parse(options.runnerId);
   if (options.runnerKey.length < 32)
     throw new Error('Runner registration key is too short');
+  if (
+    options.request.operation === 'capacity_change' &&
+    (options.request.root !== 'staging' ||
+      options.request.configurationPrUrl !== options.configurationPr.url ||
+      !gitSha.safeParse(options.request.configurationPrHeadCommit).success ||
+      ![1, 2].includes(options.request.previousWorkers ?? 0) ||
+      ![1, 2].includes(options.request.desiredWorkers ?? 0) ||
+      options.request.previousWorkers === options.request.desiredWorkers)
+  )
+    throw new Error('Capacity request lacks its exact bounded PR and baseline');
+  const reviewScope =
+    options.request.operation === 'capacity_change'
+      ? {
+          capacityDesiredWorkers: options.request.desiredWorkers,
+          capacityPrHeadCommit: options.request.configurationPrHeadCommit,
+        }
+      : {};
   const checkout = await realpath(options.checkoutDirectory);
   const root = join(
     checkout,
@@ -136,6 +160,8 @@ export async function prepareTerraformSavedPlan(options: {
       pullRequest: options.configurationPr,
       sourceCommit,
       root: options.request.root,
+      requesterRef: requester,
+      ...reviewScope,
     }))
   )
     throw new Error('Reviewed merged Terraform configuration is not current');
@@ -271,6 +297,14 @@ export async function prepareTerraformSavedPlan(options: {
     runnerKey: options.runnerKey,
   });
   assertTerraformPlanScope(binding, registration.summary);
+  if (
+    options.request.operation === 'capacity_change' &&
+    (registration.summary.changes[0]?.workerDesiredSize?.before !==
+      options.request.previousWorkers ||
+      registration.summary.changes[0]?.workerDesiredSize?.after !==
+        options.request.desiredWorkers)
+  )
+    throw new Error('Saved capacity plan differs from the bounded request');
   const [
     currentConfigDigest,
     currentVariablesDigest,
@@ -295,6 +329,8 @@ export async function prepareTerraformSavedPlan(options: {
       pullRequest: options.configurationPr,
       sourceCommit,
       root: options.request.root,
+      requesterRef: requester,
+      ...reviewScope,
     }))
   )
     throw new Error('Configuration changed while preparing the saved plan');

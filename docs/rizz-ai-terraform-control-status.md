@@ -8,9 +8,14 @@ registered from AWS and no approval can launch Terraform.
 
 The staging node group now has a bounded `worker_desired_size` (one or two).
 The committed `infra/aws/environments/staging/capacity.auto.tfvars.json` pins
-one worker and gives a future reviewed platform PR one exact capacity field to
-change. Two workers are not offered as a portal control until live controller
-and app requests, rollout headroom and cost have been measured. Changing the
+one worker and gives a reviewed platform PR one exact capacity field to
+change. The hybrid configuration path is implemented locally: foundation
+setup uses a platform-authored PR; a bounded Backstage form opens a one-file
+capacity PR for 1↔2 workers. The capacity publisher is disabled until a
+separate GitHub write token, explicit activation, and a reviewed HTTPS
+measurement-evidence URL are supplied. No such live measurements or activation
+are claimed here. The backend freezes the main baseline and verifies the
+generated PR head, merged file value, and saved-plan worker change. Changing the
 tracked file is a Terraform configuration change, not an application replica
 change and not a deployment.
 
@@ -50,8 +55,8 @@ against AWS or deployed to CI. No live AWS or Terraform command has been run.
 Independent result observation remains to be wired before an Apply/Destroy
 portal control can be enabled.
 
-The Backstage plugin now persists authenticated platform-team foundation
-requests and accepts a sanitized plan summary only from a Backstage service
+The Backstage plugin now persists authenticated platform-team foundation and
+capacity requests and accepts a sanitized plan summary only from a Backstage service
 principal with a separate runner HMAC proof. A read-only GitHub verifier
 requires a same-repository, reviewed, merged configuration PR at the bound
 commit, which must still be the platform repository's current `main`; files
@@ -60,20 +65,20 @@ must match platform-owned configuration, not runner-supplied values. A **differe
 current platform member can record a digest-bound plan approval. The receipt
 is hidden from browser responses and retrievable only by the runner service.
 The `/rizz-infrastructure` page shows request status, PR, plan identity and
-redacted resource actions, with no Apply/Destroy control. A request does not
-create a PR; the current path needs an operator to prepare a meaningful
-configuration PR and to provision the separate runner. Auto-creating a PR
-that only records a foundation request ID would not change the foundation
+redacted resource actions, with no Apply/Destroy control. A foundation request
+does not create a PR; an operator must prepare a meaningful configuration PR
+and provision the separate runner. An activated bounded capacity request can
+create the one-file PR but never apply it. Auto-creating a PR that only records
+a foundation request ID would not change the foundation
 configuration and would be a misleading review gate. The fixed
 `foundation_setup` request currently has no reviewed configuration delta to
-publish, so a bounded publisher needs an explicit operation/input contract
-before it can be enabled.
+publish; it deliberately remains platform-authored.
 Without all six `AGENT_GUARD_TERRAFORM_*` environment values (repo, dedicated
 GitHub read token, distinct runner and approval keys, expected AWS account ID,
 fixed runner ID), this area reports disabled.
 Do not enable it with development keys or claim an executable infrastructure
-workflow: configuration PR publishing, protected runner deployment/dispatch,
-the actual state-bucket bootstrap, independent run observation, drift and
+workflow: protected runner deployment/dispatch, the actual state-bucket
+bootstrap, independent run observation, drift and
 teardown controls are still outstanding. The operator handoff is in
 `docs/rizz-ai-terraform-runner.md`.
 

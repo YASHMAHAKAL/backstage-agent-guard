@@ -55,6 +55,7 @@ function harness(overrides?: {
   stateUnavailable?: boolean;
   stateProvenAbsent?: boolean;
   wrongAccount?: boolean;
+  planJson?: string;
 }) {
   const calls: string[] = [];
   const run = jest.fn(async (binary: string, args: string[]) => {
@@ -85,7 +86,7 @@ function harness(overrides?: {
       await writeFile(output.slice(5), 'private saved plan', { mode: 0o600 });
       return '';
     }
-    if (command === 'terraform show') return planJson;
+    if (command === 'terraform show') return overrides?.planJson ?? planJson;
     if (command === 'terraform version')
       return JSON.stringify({ terraform_version: '1.15.8' });
     throw new Error(`Unexpected command: ${command}`);
@@ -186,5 +187,78 @@ describe('trusted Terraform saved-plan preparation', () => {
     );
     expect(h.calls).not.toContain('aws sts');
     expect(h.registerPlan).not.toHaveBeenCalled();
+  });
+
+  it('requires a saved capacity plan to match the exact PR and requested worker delta', async () => {
+    const h = harness();
+    const incomplete = {
+      ...options(h),
+      request: {
+        ...options(h).request,
+        operation: 'capacity_change' as const,
+        root: 'staging' as const,
+        previousWorkers: 1,
+        desiredWorkers: 2,
+      },
+    };
+    await expect(prepareTerraformSavedPlan(incomplete)).rejects.toThrow(
+      'exact bounded PR',
+    );
+    expect(h.calls).not.toContain('terraform plan');
+
+    const stagingRoot = join(directory, 'infra/aws/environments/staging');
+    await mkdir(stagingRoot, { recursive: true });
+    await Promise.all([
+      writeFile(join(stagingRoot, 'main.tf'), 'resource "test" "one" {}\n'),
+      writeFile(
+        join(stagingRoot, 'terraform.tfvars'),
+        'aws_profile="platform-runner"\n',
+      ),
+      writeFile(
+        join(stagingRoot, 'capacity.auto.tfvars.json'),
+        '{"worker_desired_size":2}\n',
+      ),
+      writeFile(
+        join(stagingRoot, 'state.backend.hcl'),
+        'bucket="private"\nprofile="platform-runner"\nallowed_account_ids=["000000000000"]\n',
+      ),
+      writeFile(join(stagingRoot, '.terraform.lock.hcl'), '# lock\n'),
+    ]);
+    const capacityPlanJson = JSON.stringify({
+      ...JSON.parse(planJson),
+      resource_changes: [
+        {
+          address: 'aws_eks_node_group.staging',
+          type: 'aws_eks_node_group',
+          change: {
+            actions: ['update'],
+            before: { scaling_config: [{ desired_size: 1 }] },
+            after: { scaling_config: [{ desired_size: 2 }] },
+          },
+        },
+      ],
+    });
+    const validHarness = harness({ planJson: capacityPlanJson });
+    const input = {
+      ...options(validHarness),
+      request: {
+        ...incomplete.request,
+        configurationPrUrl: configurationPr.url,
+        configurationPrHeadCommit: 'b'.repeat(40),
+      },
+    };
+    const result = await prepareTerraformSavedPlan(input);
+    expect(result.requestId).toBe(requestId);
+    expect(validHarness.verifyMergedReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requesterRef: 'user:default/requester',
+        capacityDesiredWorkers: 2,
+        capacityPrHeadCommit: 'b'.repeat(40),
+      }),
+    );
+    expect(
+      validHarness.registerPlan.mock.calls[0][0].summary.changes[0]
+        .workerDesiredSize,
+    ).toEqual({ before: 1, after: 2 });
   });
 });

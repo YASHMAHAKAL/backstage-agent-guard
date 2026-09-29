@@ -24,17 +24,33 @@ import {
   TerraformApprovalReceipt,
   TerraformPlanBinding,
 } from '../terraformPlan';
+import {
+  CapacityBaseline,
+  CapacityPr,
+  TerraformCapacityPublisher,
+} from '../terraformCapacityPublisher';
 
 type Client = Awaited<ReturnType<DatabaseService['getClient']>>;
 const platformGroup = 'group:default/platform-team';
 const digestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const requestSchema = z
-  .object({
-    operation: z.literal('foundation_setup'),
-    root: z.enum(['registry', 'staging']),
-    declaredIntent: z.string().trim().min(20).max(1000),
-  })
-  .strict();
+const declaredIntent = z.string().trim().min(20).max(1000);
+const requestSchema = z.discriminatedUnion('operation', [
+  z
+    .object({
+      operation: z.literal('foundation_setup'),
+      root: z.enum(['registry', 'staging']),
+      declaredIntent,
+    })
+    .strict(),
+  z
+    .object({
+      operation: z.literal('capacity_change'),
+      root: z.literal('staging'),
+      desiredWorkers: z.number().int().min(1).max(2),
+      declaredIntent,
+    })
+    .strict(),
+]);
 const configurationPrSchema = z
   .object({
     url: z.string().url().max(300),
@@ -76,6 +92,7 @@ type Request = z.infer<typeof requestSchema>;
 type ConfigurationPr = z.infer<typeof configurationPrSchema>;
 type Status =
   | 'awaiting_configuration_pr'
+  | 'configuration_pr_open'
   | 'awaiting_plan_review'
   | 'plan_approved'
   | 'plan_rejected'
@@ -86,6 +103,8 @@ interface RecordData {
   version: number;
   status: Status;
   request: Request;
+  capacityBaseline?: CapacityBaseline;
+  configurationPrDraft?: CapacityPr;
   requester: string;
   createdAt: string;
   plan?: {
@@ -119,6 +138,9 @@ export interface TerraformConfigurationReader {
     pullRequest: ConfigurationPr;
     sourceCommit: string;
     root: Request['root'];
+    requesterRef: string;
+    capacityDesiredWorkers?: number;
+    capacityPrHeadCommit?: string;
   }): Promise<boolean>;
 }
 
@@ -134,6 +156,7 @@ export class TerraformControlService {
       expectedAccountId: string;
       expectedRunnerId: string;
       configurationReader: TerraformConfigurationReader;
+      capacityPublisher?: TerraformCapacityPublisher;
     },
   ) {}
 
@@ -147,6 +170,7 @@ export class TerraformControlService {
     expectedAccountId: string;
     expectedRunnerId: string;
     configurationReader: TerraformConfigurationReader;
+    capacityPublisher?: TerraformCapacityPublisher;
   }) {
     if (
       options.runnerKey.length < 32 ||
@@ -244,12 +268,29 @@ export class TerraformControlService {
     const requester = await this.platformUser(credentials);
     const parsed = requestSchema.safeParse(raw);
     if (!parsed.success) throw new InputError('Invalid foundation request');
+    if (
+      parsed.data.operation === 'capacity_change' &&
+      !this.options.capacityPublisher
+    )
+      throw new ServiceUnavailableError(
+        'Bounded capacity publishing is not configured',
+      );
+    const baseline =
+      parsed.data.operation === 'capacity_change'
+        ? await this.options.capacityPublisher!.readBaseline()
+        : undefined;
+    if (
+      parsed.data.operation === 'capacity_change' &&
+      baseline?.workers === parsed.data.desiredWorkers
+    )
+      throw new InputError('Requested worker count already matches main');
     const now = new Date().toISOString();
     const record: RecordData = {
       id: randomUUID(),
       version: 1,
       status: 'awaiting_configuration_pr',
       request: parsed.data,
+      ...(baseline ? { capacityBaseline: baseline } : {}),
       requester,
       createdAt: now,
       audit: [{ event: 'submitted', actor: requester, at: now }],
@@ -276,6 +317,58 @@ export class TerraformControlService {
         Date.now() < Date.parse(record.plan.binding.expiresAt),
       executable: false as const,
     };
+  }
+
+  capacityPublishingAvailable() {
+    return !!this.options.capacityPublisher;
+  }
+
+  /** Opens only a one-file configuration PR. Foundation setup remains a
+   * platform-authored repository change with a separate plan review. */
+  async publishCapacity(id: string, credentials: BackstageCredentials) {
+    const requester = await this.platformUser(credentials);
+    const record = await this.load(id);
+    if (!this.options.capacityPublisher)
+      throw new ServiceUnavailableError(
+        'Bounded capacity publishing is not configured',
+      );
+    if (
+      record.request.operation !== 'capacity_change' ||
+      !record.capacityBaseline
+    )
+      throw new InputError('Only bounded capacity requests can publish a PR');
+    if (record.requester !== requester)
+      throw new NotAllowedError(
+        'Only the original requester may publish this configuration PR',
+      );
+    if (
+      record.status === 'configuration_pr_open' &&
+      record.configurationPrDraft
+    )
+      return this.publicView(record, requester);
+    if (record.status !== 'awaiting_configuration_pr')
+      throw new ConflictError(
+        'This request is no longer awaiting a configuration PR',
+      );
+    const draft = await this.options.capacityPublisher.publish({
+      requestId: record.id,
+      requester,
+      desiredWorkers: record.request.desiredWorkers,
+      baseline: record.capacityBaseline,
+    });
+    const now = new Date().toISOString();
+    const next: RecordData = {
+      ...record,
+      version: record.version + 1,
+      status: 'configuration_pr_open',
+      configurationPrDraft: draft,
+      audit: [
+        ...record.audit,
+        { event: 'configuration_pr_opened', actor: requester, at: now },
+      ],
+    };
+    await this.replace(record, next);
+    return this.publicView(next, requester);
   }
 
   async list(credentials: BackstageCredentials) {
@@ -306,7 +399,10 @@ export class TerraformControlService {
       input.data.proof,
     );
     const record = await this.load(input.data.requestId);
-    if (record.status !== 'awaiting_configuration_pr')
+    if (
+      record.status !== 'awaiting_configuration_pr' &&
+      record.status !== 'configuration_pr_open'
+    )
       throw new ConflictError('Request is no longer awaiting a plan');
     return {
       id: record.id,
@@ -314,6 +410,14 @@ export class TerraformControlService {
       operation: record.request.operation,
       root: record.request.root,
       createdAt: record.createdAt,
+      ...(record.request.operation === 'capacity_change'
+        ? {
+            desiredWorkers: record.request.desiredWorkers,
+            previousWorkers: record.capacityBaseline?.workers,
+            configurationPrUrl: record.configurationPrDraft?.url,
+            configurationPrHeadCommit: record.configurationPrDraft?.headCommit,
+          }
+        : {}),
     };
   }
 
@@ -338,7 +442,10 @@ export class TerraformControlService {
     const { proof, ...message } = input.data;
     this.verifyRunnerProof(message, proof);
     const record = await this.load(message.requestId);
-    if (record.status !== 'awaiting_configuration_pr')
+    if (
+      record.status !== 'awaiting_configuration_pr' &&
+      record.status !== 'configuration_pr_open'
+    )
       throw new ConflictError('A plan is already registered or decided');
     const binding = message.binding;
     if (
@@ -355,11 +462,37 @@ export class TerraformControlService {
     )
       throw new ConflictError('Plan does not match this live request');
     const summary = message.summary;
-    assertTerraformPlanScope(binding, summary);
+    try {
+      assertTerraformPlanScope(binding, summary);
+    } catch {
+      throw new ConflictError('Plan exceeds the reviewed operation scope');
+    }
+    if (record.request.operation === 'capacity_change') {
+      if (
+        record.status !== 'configuration_pr_open' ||
+        !record.configurationPrDraft ||
+        record.configurationPrDraft.url !== message.configurationPr.url ||
+        !record.capacityBaseline ||
+        summary.changes[0]?.workerDesiredSize?.before !==
+          record.capacityBaseline.workers ||
+        summary.changes[0]?.workerDesiredSize?.after !==
+          record.request.desiredWorkers
+      )
+        throw new ConflictError(
+          'Capacity plan differs from the bounded request or PR',
+        );
+    }
     const reviewed = await this.options.configurationReader.verifyMergedReview({
       pullRequest: message.configurationPr,
       sourceCommit: binding.sourceCommit,
       root: binding.root,
+      requesterRef: record.requester,
+      ...(record.request.operation === 'capacity_change'
+        ? {
+            capacityDesiredWorkers: record.request.desiredWorkers,
+            capacityPrHeadCommit: record.configurationPrDraft!.headCommit,
+          }
+        : {}),
     });
     if (!reviewed)
       throw new ConflictError(
@@ -409,6 +542,13 @@ export class TerraformControlService {
         pullRequest: record.plan.configurationPr,
         sourceCommit: record.plan.binding.sourceCommit,
         root: record.plan.binding.root,
+        requesterRef: record.requester,
+        ...(record.request.operation === 'capacity_change'
+          ? {
+              capacityDesiredWorkers: record.request.desiredWorkers,
+              capacityPrHeadCommit: record.configurationPrDraft?.headCommit,
+            }
+          : {}),
       }))
     )
       throw new ConflictError(
@@ -472,6 +612,13 @@ export class TerraformControlService {
         pullRequest: record.plan.configurationPr,
         sourceCommit: record.plan.binding.sourceCommit,
         root: record.plan.binding.root,
+        requesterRef: record.requester,
+        ...(record.request.operation === 'capacity_change'
+          ? {
+              capacityDesiredWorkers: record.request.desiredWorkers,
+              capacityPrHeadCommit: record.configurationPrDraft?.headCommit,
+            }
+          : {}),
       }))
     )
       throw new ConflictError(

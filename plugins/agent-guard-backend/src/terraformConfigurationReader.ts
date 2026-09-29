@@ -1,5 +1,6 @@
 import { z } from 'zod/v3';
 import { TerraformConfigurationReader } from './services/TerraformControlService';
+import { capacityFile } from './terraformCapacityPublisher';
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const positive = z.number().int().positive();
@@ -21,7 +22,7 @@ const pullSchema = z.object({
 });
 const reviewSchema = z.object({
   id: positive,
-  user: z.object({ id: positive }),
+  user: z.object({ id: positive, login: z.string().min(1) }),
   state: z.enum([
     'APPROVED',
     'CHANGES_REQUESTED',
@@ -85,6 +86,9 @@ export class GitHubTerraformConfigurationReader
     pullRequest: { url: string; mergedCommit: string };
     sourceCommit: string;
     root: 'registry' | 'staging';
+    requesterRef: string;
+    capacityDesiredWorkers?: number;
+    capacityPrHeadCommit?: string;
   }) {
     const expectedPrefix = `https://github.com/${this.options.owner}/${this.options.repo}/pull/`;
     if (!input.pullRequest.url.startsWith(expectedPrefix)) return false;
@@ -107,6 +111,11 @@ export class GitHubTerraformConfigurationReader
       pull.head.repo.full_name.toLowerCase() !== expectedName
     )
       return false;
+    if (
+      input.capacityDesiredWorkers !== undefined &&
+      (input.root !== 'staging' || pull.head.sha !== input.capacityPrHeadCommit)
+    )
+      return false;
     const reviews = z
       .array(reviewSchema)
       .max(100)
@@ -125,6 +134,8 @@ export class GitHubTerraformConfigurationReader
     const approved = [...latest.values()].some(
       review =>
         review.user.id !== pull.user.id &&
+        `user:default/${review.user.login.toLowerCase()}` !==
+          input.requesterRef.toLowerCase() &&
         review.state === 'APPROVED' &&
         review.commit_id === pull.head.sha,
     );
@@ -143,11 +154,30 @@ export class GitHubTerraformConfigurationReader
         object: z.object({ type: z.literal('commit'), sha }),
       })
       .parse(await this.read('/git/ref/heads/main'));
-    return (
+    const reviewedFiles =
       files.length === pull.changed_files &&
       files.length > 0 &&
       files.every(file => file.filename.startsWith(prefix)) &&
-      mainRef.object.sha === input.sourceCommit
-    );
+      mainRef.object.sha === input.sourceCommit;
+    if (!reviewedFiles) return false;
+    if (input.capacityDesiredWorkers === undefined) return true;
+    if (
+      files.length !== 1 ||
+      files[0].filename !== capacityFile ||
+      files[0].status !== 'modified'
+    )
+      return false;
+    const content = z
+      .object({ encoding: z.literal('base64'), content: z.string() })
+      .parse(
+        await this.read(`/contents/${capacityFile}?ref=${input.sourceCommit}`),
+      );
+    const decoded = Buffer.from(content.content.replace(/\s/g, ''), 'base64');
+    if (decoded.length > 1024) return false;
+    const config = z
+      .object({ worker_desired_size: z.number().int().min(1).max(2) })
+      .strict()
+      .parse(JSON.parse(decoded.toString('utf8')));
+    return config.worker_desired_size === input.capacityDesiredWorkers;
   }
 }

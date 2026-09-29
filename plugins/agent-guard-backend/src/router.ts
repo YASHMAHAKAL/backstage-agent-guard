@@ -45,7 +45,11 @@ export function createRouter(options: {
       return;
     }
     await terraform().list(credentials);
-    res.json({ state: 'request_and_review', executable: false });
+    res.json({
+      state: 'request_and_review',
+      executable: false,
+      capacityPublishing: terraform().capacityPublishingAvailable(),
+    });
   });
   router.post('/rizz/terraform/requests', async (req, res) => {
     const credentials = await options.httpAuth.credentials(req, {
@@ -68,6 +72,16 @@ export function createRouter(options: {
     res.set('Cache-Control', 'no-store');
     res.json(await terraform().get(req.params.id, credentials));
   });
+  router.post(
+    '/rizz/terraform/requests/:id/configuration-pr',
+    async (req, res) => {
+      const credentials = await options.httpAuth.credentials(req, {
+        allow: ['user'],
+      });
+      res.set('Cache-Control', 'no-store');
+      res.json(await terraform().publishCapacity(req.params.id, credentials));
+    },
+  );
   router.post('/rizz/terraform/requests/:id/decision', async (req, res) => {
     const credentials = await options.httpAuth.credentials(req, {
       allow: ['user'],

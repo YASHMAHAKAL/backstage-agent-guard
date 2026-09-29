@@ -6,6 +6,7 @@ import './RizzInfrastructurePage.css';
 type Capability = {
   state: 'disabled' | 'request_and_review';
   executable: false;
+  capacityPublishing?: boolean;
 };
 type Plan = {
   bindingDigest: string;
@@ -36,6 +37,7 @@ type Request = {
   id: string;
   status:
     | 'awaiting_configuration_pr'
+    | 'configuration_pr_open'
     | 'awaiting_plan_review'
     | 'plan_approved'
     | 'plan_rejected'
@@ -44,9 +46,19 @@ type Request = {
   requester: string;
   createdAt: string;
   request: {
-    operation: 'foundation_setup';
+    operation: 'foundation_setup' | 'capacity_change';
     root: 'registry' | 'staging';
     declaredIntent: string;
+    desiredWorkers?: number;
+  };
+  capacityBaseline?: {
+    mainSha: string;
+    workers: number;
+  };
+  configurationPrDraft?: {
+    url: string;
+    headCommit: string;
+    baseCommit: string;
   };
   plan?: Plan;
   decision?: {
@@ -64,12 +76,21 @@ type Request = {
   executable: false;
 };
 
+const requestTitle = (item: Request) =>
+  item.request.operation === 'capacity_change'
+    ? 'Staging capacity'
+    : `${item.request.root} foundation`;
+
 export function RizzInfrastructurePage() {
   const { fetch } = useApi(fetchApiRef);
   const [capability, setCapability] = useState<Capability | null>(null);
   const [requests, setRequests] = useState<Request[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [root, setRoot] = useState<'registry' | 'staging'>('staging');
+  const [operation, setOperation] = useState<
+    'foundation_setup' | 'capacity_change'
+  >('foundation_setup');
+  const [desiredWorkers, setDesiredWorkers] = useState<1 | 2>(2);
   const [intent, setIntent] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -130,9 +151,10 @@ export function RizzInfrastructurePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            operation: 'foundation_setup',
-            root,
+            operation,
+            root: operation === 'capacity_change' ? 'staging' : root,
             declaredIntent: intent,
+            ...(operation === 'capacity_change' ? { desiredWorkers } : {}),
           }),
         },
       );
@@ -144,6 +166,25 @@ export function RizzInfrastructurePage() {
       setSelectedId(created.id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Submission failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publishCapacity() {
+    if (!selected || selected.request.operation !== 'capacity_change') return;
+    setBusy(true);
+    setError('');
+    try {
+      const response = await fetch(
+        `plugin://agent-guard/rizz/terraform/requests/${selected.id}/configuration-pr`,
+        { method: 'POST' },
+      );
+      if (!response.ok)
+        throw new Error(`Configuration PR was not opened (${response.status})`);
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Publishing failed');
     } finally {
       setBusy(false);
     }
@@ -217,24 +258,67 @@ export function RizzInfrastructurePage() {
           <div className="ag-infra-grid">
             <section className="ag-infra-card">
               <p className="ag-kicker">REQUEST</p>
-              <h2>Record foundation intent</h2>
+              <h2>Request infrastructure change</h2>
               <p>
-                This records a platform request only. An operator must create
-                and merge a separately reviewed configuration PR before a
-                trusted runner can register an actual saved plan.
+                Foundation changes use a platform-authored PR. The bounded
+                capacity form can open a one-file PR when its publisher is
+                configured. Neither path runs Terraform.
               </p>
               <form onSubmit={submit} className="ag-infra-form">
-                <label htmlFor="infra-root">Terraform root</label>
+                <label htmlFor="infra-operation">Change type</label>
                 <select
-                  id="infra-root"
-                  value={root}
+                  id="infra-operation"
+                  value={operation}
                   onChange={event =>
-                    setRoot(event.target.value as 'registry' | 'staging')
+                    setOperation(
+                      event.target.value as
+                        | 'foundation_setup'
+                        | 'capacity_change',
+                    )
                   }
                 >
-                  <option value="registry">Registry</option>
-                  <option value="staging">EKS staging</option>
+                  <option value="foundation_setup">
+                    Foundation setup (platform-authored PR)
+                  </option>
+                  {capability.capacityPublishing && (
+                    <option value="capacity_change">
+                      Staging node capacity (bounded PR)
+                    </option>
+                  )}
                 </select>
+                {operation === 'foundation_setup' ? (
+                  <>
+                    <label htmlFor="infra-root">Terraform root</label>
+                    <select
+                      id="infra-root"
+                      value={root}
+                      onChange={event =>
+                        setRoot(event.target.value as 'registry' | 'staging')
+                      }
+                    >
+                      <option value="registry">Registry</option>
+                      <option value="staging">EKS staging</option>
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Only the staging managed-node desired count can change.
+                      Allowed values: 1 or 2 workers. App replicas are separate.
+                    </p>
+                    <label htmlFor="infra-workers">Desired workers</label>
+                    <select
+                      id="infra-workers"
+                      value={desiredWorkers}
+                      onChange={event =>
+                        setDesiredWorkers(Number(event.target.value) as 1 | 2)
+                      }
+                    >
+                      <option value={1}>1 worker</option>
+                      <option value={2}>2 workers</option>
+                    </select>
+                  </>
+                )}
                 <label htmlFor="infra-intent">Declared intent</label>
                 <textarea
                   id="infra-intent"
@@ -243,7 +327,11 @@ export function RizzInfrastructurePage() {
                   required
                   value={intent}
                   onChange={event => setIntent(event.target.value)}
-                  placeholder="Set up the reviewed Rizz.AI staging foundation in us-east-1…"
+                  placeholder={
+                    operation === 'capacity_change'
+                      ? 'Change only the staging node group from one to two workers…'
+                      : 'Set up the reviewed Rizz.AI staging foundation in us-east-1…'
+                  }
                 />
                 <button disabled={busy} type="submit">
                   Record request
@@ -268,7 +356,7 @@ export function RizzInfrastructurePage() {
                         }}
                         type="button"
                       >
-                        <span>{item.request.root} foundation</span>
+                        <span>{requestTitle(item)}</span>
                         <small>{item.status.replaceAll('_', ' ')}</small>
                       </button>
                     </li>
@@ -279,11 +367,7 @@ export function RizzInfrastructurePage() {
 
             <section className="ag-infra-card ag-infra-detail">
               <p className="ag-kicker">EXACT CHANGE</p>
-              <h2>
-                {selected
-                  ? `${selected.request.root} foundation`
-                  : 'Select a request'}
-              </h2>
+              <h2>{selected ? requestTitle(selected) : 'Select a request'}</h2>
               {selected && (
                 <>
                   <p>
@@ -297,6 +381,36 @@ export function RizzInfrastructurePage() {
                     <strong>Status:</strong>{' '}
                     {selected.status.replaceAll('_', ' ')}
                   </p>
+                  {selected.request.operation === 'capacity_change' && (
+                    <p>
+                      <strong>Bounded change:</strong>{' '}
+                      {selected.capacityBaseline?.workers ?? 'unknown'} →{' '}
+                      {selected.request.desiredWorkers} staging workers
+                    </p>
+                  )}
+                  {selected.configurationPrDraft && (
+                    <p>
+                      <strong>Configuration PR:</strong>{' '}
+                      <a
+                        href={selected.configurationPrDraft.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Review one-file PR
+                      </a>{' '}
+                      (merge does not apply Terraform)
+                    </p>
+                  )}
+                  {selected.request.operation === 'capacity_change' &&
+                    selected.status === 'awaiting_configuration_pr' && (
+                      <button
+                        disabled={busy}
+                        onClick={() => void publishCapacity()}
+                        type="button"
+                      >
+                        Open bounded configuration PR
+                      </button>
+                    )}
                   {selected.plan ? (
                     <>
                       <p>

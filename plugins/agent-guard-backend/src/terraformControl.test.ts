@@ -56,10 +56,22 @@ afterEach(async () => {
   else process.env.AGENT_GUARD_AUTH_MODE = initialAuthMode;
 });
 
-async function start() {
+async function start(withCapacityPublisher = false) {
   process.env.AGENT_GUARD_AUTH_MODE = 'github';
   const configurationReader = {
     verifyMergedReview: jest.fn().mockResolvedValue(true),
+  };
+  const capacityPublisher = {
+    readBaseline: jest.fn().mockResolvedValue({
+      mainSha: 'b'.repeat(40),
+      fileSha: 'c'.repeat(40),
+      workers: 1,
+    }),
+    publish: jest.fn().mockResolvedValue({
+      url: 'https://github.com/example/backstage-agent-guard/pull/19',
+      headCommit: 'd'.repeat(40),
+      baseCommit: 'b'.repeat(40),
+    }),
   };
   backend = await startTestBackend({
     features: [
@@ -107,11 +119,12 @@ async function start() {
           expectedAccountId: '000000000000',
           expectedRunnerId: 'terraform-runner-staging',
           configurationReader,
+          ...(withCapacityPublisher ? { capacityPublisher } : {}),
         },
       }),
     ],
   });
-  return { ...backend, configurationReader };
+  return { ...backend, configurationReader, capacityPublisher };
 }
 
 const base = '/api/agent-guard/rizz/terraform';
@@ -171,6 +184,123 @@ function planMessage(id: string) {
 }
 
 describe('platform Terraform request and plan review gate', () => {
+  it('publishes only an authenticated bounded capacity PR and binds the saved plan to it', async () => {
+    const { server, capacityPublisher, configurationReader } = await start(
+      true,
+    );
+    await request(server)
+      .post(`${base}/requests`)
+      .set('Authorization', header('requester'))
+      .send({
+        operation: 'capacity_change',
+        root: 'staging',
+        desiredWorkers: 1,
+        declaredIntent: 'Keep only one Rizz.AI staging worker running.',
+      })
+      .expect(400);
+    const submitted = await request(server)
+      .post(`${base}/requests`)
+      .set('Authorization', header('requester'))
+      .send({
+        operation: 'capacity_change',
+        root: 'staging',
+        desiredWorkers: 2,
+        declaredIntent:
+          'Increase only the Rizz.AI staging worker count to two.',
+      })
+      .expect(201);
+    expect(submitted.body.capacityBaseline.workers).toBe(1);
+    const publishPath = `${base}/requests/${submitted.body.id}/configuration-pr`;
+    await request(server)
+      .post(publishPath)
+      .set('Authorization', header('reviewer'))
+      .expect(403);
+    const published = await request(server)
+      .post(publishPath)
+      .set('Authorization', header('requester'))
+      .expect(200);
+    expect(published.body.status).toBe('configuration_pr_open');
+    expect(published.body.configurationPrDraft.url).toContain('/pull/19');
+    await request(server)
+      .post(publishPath)
+      .set('Authorization', header('requester'))
+      .expect(200);
+    expect(capacityPublisher.publish).toHaveBeenCalledTimes(1);
+    const lookup = { requestId: submitted.body.id };
+    const pending = await request(server)
+      .post('/api/agent-guard/internal/rizz/terraform/request')
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...lookup, proof: proof(lookup) })
+      .expect(200);
+    expect(pending.body).toMatchObject({
+      desiredWorkers: 2,
+      previousWorkers: 1,
+      configurationPrUrl: published.body.configurationPrDraft.url,
+      configurationPrHeadCommit: 'd'.repeat(40),
+    });
+    const baseMessage = planMessage(submitted.body.id);
+    const message = {
+      ...baseMessage,
+      binding: { ...baseMessage.binding, operation: 'capacity_change' },
+      summary: {
+        terraformVersion: '1.15.8',
+        counts: { create: 0, update: 1, delete: 0, replace: 0, read: 0 },
+        changes: [
+          {
+            address: 'aws_eks_node_group.staging',
+            type: 'aws_eks_node_group',
+            action: 'update',
+            workerDesiredSize: { before: 1, after: 2 },
+          },
+        ],
+      },
+      configurationPr: {
+        url: published.body.configurationPrDraft.url,
+        mergedCommit: 'a'.repeat(40),
+      },
+    };
+    const plansPath = '/api/agent-guard/internal/rizz/terraform/plans';
+    const wrong = {
+      ...message,
+      summary: {
+        ...message.summary,
+        changes: [
+          {
+            ...message.summary.changes[0],
+            workerDesiredSize: { before: 1, after: 1 },
+          },
+        ],
+      },
+    };
+    await request(server)
+      .post(plansPath)
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...wrong, proof: proof(wrong) })
+      .expect(409);
+    const swappedPr = {
+      ...message,
+      configurationPr: {
+        ...message.configurationPr,
+        url: 'https://github.com/example/backstage-agent-guard/pull/20',
+      },
+    };
+    await request(server)
+      .post(plansPath)
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...swappedPr, proof: proof(swappedPr) })
+      .expect(409);
+    await request(server)
+      .post(plansPath)
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...message, proof: proof(message) })
+      .expect(201);
+    expect(configurationReader.verifyMergedReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        capacityDesiredWorkers: 2,
+        capacityPrHeadCommit: 'd'.repeat(40),
+      }),
+    );
+  });
   it('exposes a pending request only to the authenticated, proof-bearing runner', async () => {
     const { server } = await start();
     const submitted = await foundationRequest(server);
@@ -204,6 +334,16 @@ describe('platform Terraform request and plan review gate', () => {
 
   it('denies outsider, guest, and service submission before recording anything', async () => {
     const { server } = await start();
+    await request(server)
+      .post(`${base}/requests`)
+      .set('Authorization', header('requester'))
+      .send({
+        operation: 'capacity_change',
+        root: 'staging',
+        desiredWorkers: 2,
+        declaredIntent: 'Increase only the Rizz.AI staging worker count.',
+      })
+      .expect(503);
     for (const identity of ['outsider', 'guest']) {
       const response = await request(server)
         .post(`${base}/requests`)

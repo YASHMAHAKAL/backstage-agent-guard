@@ -20,7 +20,7 @@ const pull = {
 };
 const review = {
   id: 2,
-  user: { id: 2 },
+  user: { id: 2, login: 'reviewer' },
   state: 'APPROVED',
   commit_id: pull.head.sha,
   submitted_at: '2026-09-29T09:00:00.000Z',
@@ -37,6 +37,7 @@ function reader(
     reviews?: object[];
     files?: object[];
     mainSha?: string;
+    workers?: number;
   } = {},
 ) {
   const fetcher = jest.fn(async (requestUrl: string) => {
@@ -50,6 +51,13 @@ function reader(
       value = override.reviews ?? [review];
     } else if (requestUrl.includes('/files?')) {
       value = override.files ?? files;
+    } else if (requestUrl.includes('/contents/')) {
+      value = {
+        encoding: 'base64',
+        content: Buffer.from(
+          JSON.stringify({ worker_desired_size: override.workers ?? 2 }),
+        ).toString('base64'),
+      };
     } else {
       value = override.pull ?? pull;
     }
@@ -66,6 +74,7 @@ const check = {
   pullRequest: { url, mergedCommit: sha },
   sourceCommit: sha,
   root: 'staging' as const,
+  requesterRef: 'user:default/requester',
 };
 
 describe('GitHub Terraform configuration PR reader', () => {
@@ -95,6 +104,11 @@ describe('GitHub Terraform configuration PR reader', () => {
   it('rejects stale review, changed review state and out-of-root files', async () => {
     await expect(
       reader({
+        reviews: [{ ...review, user: { id: 2, login: 'requester' } }],
+      }).verifyMergedReview(check),
+    ).resolves.toBe(false);
+    await expect(
+      reader({
         reviews: [{ ...review, commit_id: 'c'.repeat(40) }],
       }).verifyMergedReview(check),
     ).resolves.toBe(false);
@@ -117,6 +131,36 @@ describe('GitHub Terraform configuration PR reader', () => {
           { filename: 'infra/aws/registry/versions.tf', status: 'modified' },
         ],
       }).verifyMergedReview(check),
+    ).resolves.toBe(false);
+  });
+
+  it('binds a capacity PR to the exact generated head and merged one-file value', async () => {
+    const capacityCheck = {
+      ...check,
+      capacityDesiredWorkers: 2,
+      capacityPrHeadCommit: pull.head.sha,
+    };
+    await expect(reader().verifyMergedReview(capacityCheck)).resolves.toBe(
+      true,
+    );
+    await expect(
+      reader({ workers: 1 }).verifyMergedReview(capacityCheck),
+    ).resolves.toBe(false);
+    await expect(
+      reader().verifyMergedReview({
+        ...capacityCheck,
+        capacityPrHeadCommit: 'c'.repeat(40),
+      }),
+    ).resolves.toBe(false);
+    await expect(
+      reader({
+        files: [
+          {
+            filename: 'infra/aws/environments/staging/eks.tf',
+            status: 'modified',
+          },
+        ],
+      }).verifyMergedReview(capacityCheck),
     ).resolves.toBe(false);
   });
 });

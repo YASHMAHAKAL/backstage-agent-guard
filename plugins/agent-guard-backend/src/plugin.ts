@@ -28,6 +28,10 @@ import {
   TerraformControlService,
 } from './services/TerraformControlService';
 import { GitHubTerraformConfigurationReader } from './terraformConfigurationReader';
+import {
+  GitHubTerraformCapacityPublisher,
+  TerraformCapacityPublisher,
+} from './terraformCapacityPublisher';
 
 export function createAgentGuardPlugin(
   options: {
@@ -43,6 +47,7 @@ export function createAgentGuardPlugin(
       expectedAccountId: string;
       expectedRunnerId: string;
       configurationReader: TerraformConfigurationReader;
+      capacityPublisher?: TerraformCapacityPublisher;
     };
   } = {},
 ) {
@@ -131,6 +136,26 @@ export function createAgentGuardPlugin(
           ];
           if (terraformEnv.some(Boolean) && !terraformEnv.every(Boolean))
             throw new Error('Incomplete Terraform control configuration');
+          const capacityWriteToken =
+            process.env.AGENT_GUARD_TERRAFORM_GITHUB_WRITE_TOKEN;
+          const capacityActivation =
+            process.env.AGENT_GUARD_TERRAFORM_CAPACITY_ACTIVATION;
+          const capacityEvidence =
+            process.env.AGENT_GUARD_TERRAFORM_CAPACITY_EVIDENCE_URL;
+          if (
+            [capacityWriteToken, capacityActivation, capacityEvidence].some(
+              Boolean,
+            ) &&
+            (!terraformEnv.every(Boolean) ||
+              !capacityWriteToken ||
+              capacityWriteToken === terraformEnv[1] ||
+              capacityWriteToken === process.env.GITHUB_TOKEN ||
+              capacityActivation !== 'YES-REVIEWED-MEASURED-CAPACITY' ||
+              !/^https:\/\/[^\s]+$/.test(capacityEvidence ?? ''))
+          )
+            throw new Error(
+              'Capacity publishing needs reviewed measurement evidence and explicit activation',
+            );
           if (terraformEnv.every(Boolean) && runtimeAuthMode !== 'github')
             throw new Error(
               'Terraform controls require GitHub user authentication',
@@ -158,6 +183,17 @@ export function createAgentGuardPlugin(
                     repo: terraformRepo[2],
                     token: terraformEnv[1]!,
                   }),
+                  ...(capacityWriteToken
+                    ? {
+                        capacityPublisher: new GitHubTerraformCapacityPublisher(
+                          {
+                            owner: terraformRepo[1],
+                            repo: terraformRepo[2],
+                            token: capacityWriteToken,
+                          },
+                        ),
+                      }
+                    : {}),
                 }
               : undefined);
           if (terraformProvider && runtimeAuthMode !== 'github')
