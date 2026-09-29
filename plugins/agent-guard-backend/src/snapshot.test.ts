@@ -24,6 +24,12 @@ describe('frozen approval snapshots', () => {
     );
   });
 
+  it('rejects values that cannot be represented as stable JSON', () => {
+    expect(() => canonicalize({ missing: undefined })).toThrow();
+    expect(() => canonicalize({ invalid: Number.NaN })).toThrow();
+    expect(() => canonicalize(new Date())).toThrow();
+  });
+
   it('renders stable files and binds execution fields to one digest', () => {
     const first = createFrozenSnapshot({
       proposalId: 'proposal-1',

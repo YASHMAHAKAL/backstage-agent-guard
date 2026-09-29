@@ -463,6 +463,25 @@ describe('platform Terraform request and plan review gate', () => {
       .set('Authorization', mockCredentials.service.header())
       .send({ ...message, proof: proof(message) });
     expect(registered.status).toBe(201);
+    const reviewState = { requestId: submitted.body.id };
+    const stateEndpoint =
+      '/api/agent-guard/internal/rizz/terraform/review-state';
+    await request(server)
+      .post(stateEndpoint)
+      .set('Authorization', header('requester'))
+      .send({ ...reviewState, proof: proof(reviewState) })
+      .expect(403);
+    await request(server)
+      .post(stateEndpoint)
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...reviewState, proof: `sha256:${'0'.repeat(64)}` })
+      .expect(403);
+    const awaiting = await request(server)
+      .post(stateEndpoint)
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...reviewState, proof: proof(reviewState) })
+      .expect(200);
+    expect(awaiting.body).toEqual({ state: 'awaiting_review' });
     const replay = await request(server)
       .post(endpoint)
       .set('Authorization', mockCredentials.service.header())
@@ -511,6 +530,12 @@ describe('platform Terraform request and plan review gate', () => {
     expect(approved.body.receipt).toBeUndefined();
     expect(approved.body.executable).toBe(false);
     const receiptMessage = { requestId: submitted.body.id };
+    const approvedState = await request(server)
+      .post('/api/agent-guard/internal/rizz/terraform/review-state')
+      .set('Authorization', mockCredentials.service.header())
+      .send({ ...receiptMessage, proof: proof(receiptMessage) })
+      .expect(200);
+    expect(approvedState.body).toEqual({ state: 'approved' });
     const receipt = await request(server)
       .post('/api/agent-guard/internal/rizz/terraform/receipt')
       .set('Authorization', mockCredentials.service.header())

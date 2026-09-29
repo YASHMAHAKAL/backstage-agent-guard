@@ -1021,13 +1021,17 @@ describe('authenticated cloud service using ONLY synthetic backend/reader/CI fix
       intentSource: 'agent_supplied',
     });
     const names = [...s.actions.actions.values()].map(action => action.name);
-    expect(names.filter(name => name.includes('rizz'))).toEqual([
-      'submit-rizz-rollback-proposal',
-      'submit-rizz-runtime-change-proposal',
-      'submit-rizz-release-proposal',
-      'get-rizz-release-proposal-status',
-      'get-rizz-runtime-change-proposal-status',
-    ]);
+    expect(names.filter(name => name.includes('rizz')).sort()).toEqual(
+      [
+        'submit-rizz-retirement-proposal',
+        'get-rizz-retirement-proposal-status',
+        'submit-rizz-rollback-proposal',
+        'submit-rizz-runtime-change-proposal',
+        'submit-rizz-release-proposal',
+        'get-rizz-release-proposal-status',
+        'get-rizz-runtime-change-proposal-status',
+      ].sort(),
+    );
     expect(s.scaffolder.scaffold).not.toHaveBeenCalled();
   });
   it('re-resolves release evidence at approval rather than trusting the preview', async () => {

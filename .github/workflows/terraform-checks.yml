@@ -1,15 +1,11 @@
 name: Terraform checks (no AWS authority)
 
 on:
+  # Run on every PR so the checks can safely be required on main. A path
+  # filter would leave unrelated PRs waiting forever for a skipped check.
   pull_request:
-    paths:
-      - '.github/workflows/terraform-checks.yml'
-      - 'infra/aws/**'
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/terraform-checks.yml'
-      - 'infra/aws/**'
 
 permissions:
   contents: read
@@ -59,3 +55,26 @@ jobs:
         with:
           persist-credentials: false
       - run: node infra/aws/scripts/preflight.test.mjs
+
+  runner-contract-tests:
+    name: Test Terraform runner contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: node .yarn/releases/yarn-4.13.0.cjs install --immutable
+      - run: node .yarn/releases/yarn-4.13.0.cjs tsc:full
+      - run: node .yarn/releases/yarn-4.13.0.cjs workspace @internal/backstage-plugin-agent-guard-backend build
+      - run: node --test scripts/terraform-ci-inputs.test.cjs scripts/terraform-runner.test.cjs
+      - run: >-
+          node .yarn/releases/yarn-4.13.0.cjs workspace
+          @internal/backstage-plugin-agent-guard-backend test --watch=false --runInBand
+          terraformControl.test.ts terraformPlan.test.ts
+          terraformPlanPreparation.test.ts terraformRemoteState.test.ts
+          terraformConfigurationReader.test.ts terraformCapacityPublisher.test.ts
+          terraformObservation.test.ts

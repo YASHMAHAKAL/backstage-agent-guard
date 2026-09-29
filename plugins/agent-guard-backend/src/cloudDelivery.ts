@@ -225,14 +225,16 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
     proposal: CloudProposalView,
   ): Promise<CloudDeliveryObservation> {
     const result = emptyCloudDelivery('not_published');
+    const snapshot = proposal.snapshot;
     if (
-      !(proposal.snapshot.envelope.kind === 'rizz_cloud_runtime_change'
-        ? cloudRuntimeSnapshotHasIntegrity(proposal.snapshot)
-        : cloudSnapshotHasIntegrity(proposal.snapshot)) ||
-      proposal.snapshot.envelope.proposalId !== proposal.id ||
-      proposal.snapshot.envelope.requester !== proposal.requester ||
+      !(
+        cloudRuntimeSnapshotHasIntegrity(snapshot) ||
+        cloudSnapshotHasIntegrity(snapshot)
+      ) ||
+      snapshot.envelope.proposalId !== proposal.id ||
+      snapshot.envelope.requester !== proposal.requester ||
       proposal.decision?.decision !== 'approve' ||
-      proposal.decision.digest !== proposal.snapshot.digest ||
+      proposal.decision.digest !== snapshot.digest ||
       proposal.decision.reviewer === proposal.requester
     ) {
       result.github.state = 'approval_invalid';
@@ -376,7 +378,7 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
           return;
         }
         const runtime = await this.options.runtime.observe(
-          proposal.snapshot,
+          snapshot,
           controller.signal,
         );
         result.workloads = runtime.workloads;

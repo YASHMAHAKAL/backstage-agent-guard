@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';

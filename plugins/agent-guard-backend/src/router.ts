@@ -114,6 +114,11 @@ export function createRouter(options: {
     res.set('Cache-Control', 'no-store');
     res.json(await terraform().approvedReceipt(req.body));
   });
+  router.post('/internal/rizz/terraform/review-state', async (req, res) => {
+    await options.httpAuth.credentials(req, { allow: ['service'] });
+    res.set('Cache-Control', 'no-store');
+    res.json(await terraform().runnerReviewState(req.body));
+  });
   router.post('/internal/rizz/terraform/outcome', async (req, res) => {
     await options.httpAuth.credentials(req, { allow: ['service'] });
     res.set('Cache-Control', 'no-store');

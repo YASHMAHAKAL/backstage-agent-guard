@@ -640,6 +640,30 @@ export class TerraformControlService {
     return record.receipt;
   }
 
+  /** A proof-bearing runner can wait for human review without treating every
+   * HTTP conflict as a retryable condition. No receipt or sensitive plan data
+   * is exposed by this endpoint. */
+  async runnerReviewState(raw: unknown) {
+    const input = receiptRequestSchema.safeParse(raw);
+    if (!input.success) throw new InputError('Invalid review state request');
+    this.verifyRunnerProof(
+      { requestId: input.data.requestId },
+      input.data.proof,
+    );
+    const record = await this.load(input.data.requestId);
+    if (!record.plan)
+      throw new ConflictError('No saved plan is registered for this request');
+    if (Date.now() >= Date.parse(record.plan.binding.expiresAt))
+      return { state: 'expired' as const };
+    if (record.status === 'awaiting_plan_review')
+      return { state: 'awaiting_review' as const };
+    if (record.status === 'plan_approved')
+      return { state: 'approved' as const };
+    if (record.status === 'plan_rejected')
+      return { state: 'rejected' as const };
+    return { state: 'closed' as const };
+  }
+
   /** Runner evidence is not independent proof of infrastructure readiness. */
   async reportRunnerOutcome(raw: unknown) {
     const input = runnerOutcomeSchema.safeParse(raw);

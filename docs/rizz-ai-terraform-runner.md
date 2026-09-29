@@ -20,13 +20,15 @@ The platform repository became public after a five-commit secret/history
 audit. Public GitHub Free repositories can use required environment reviewers
 ([GitHub deployment-environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
 The GitHub-hosted [Terraform checks workflow](../.github/workflows/terraform-checks.yml)
-has no AWS or OIDC permission and runs only formatting, validation, mocked
-provider tests and preflight parser tests. It is **not** a plan/apply runner.
-The `terraform-apply` GitHub environment currently restricts deployments to
-`main`, but its requested reviewer was not retained by GitHub; it must not be
-treated as an approval gate until a real reviewer and prevent-self-review rule
-are verified. No AWS role, credential, state bucket, saved-plan transfer or
-Backstage-to-Actions approval bridge is connected. The separately credentialed
+has no AWS or OIDC permission and runs formatting, validation, mocked
+provider tests, preflight parser tests and runner-contract tests. It is
+**not** a plan/apply runner.
+The `terraform-apply` GitHub environment restricts deployments to `main`,
+requires `mystic-koragg` review and prevents self-review. A separate,
+default-disabled [GitHub-hosted one-job handoff](rizz-ai-terraform-actions-predeploy.md)
+now keeps the saved plan private on its runner and waits for Backstage's
+exact-plan approval. No AWS role, credential, state bucket, secure HTTPS
+Backstage endpoint or live bridge is connected. The separately credentialed
 local adapter remains available but has not been exercised against AWS.
 
 The runner requires a clean checkout at the reviewed merge commit, an owned
@@ -41,12 +43,12 @@ The Backstage service token is configured only with the opt-in
 it to the `agent-guard` plugin and store it separately from the runner HMAC
 and approval keys. The platform backend's existing six Terraform settings
 must also be configured; see [control status](rizz-ai-terraform-control-status.md).
-This is a _local operator_ adapter. A GitHub-hosted apply runner cannot reach
-the local Backstage `localhost` service. Moving apply into Actions requires a
-reviewed outbound approval/result bridge (or a securely hosted Backstage
-service), protected workflow/branch, verified OIDC subject, least-privilege
-role and private durable plan artifact. Do not use a pull-request workflow
-with AWS authority or copy a raw saved plan to a public artifact.
+The local adapter can use loopback Backstage; the default-disabled Actions
+handoff needs a securely reachable HTTPS Backstage service and keeps the
+private plan within one hosted job. It also needs a protected workflow/branch,
+verified OIDC subject and least-privilege role before activation. Do not use
+a pull-request workflow with AWS authority or copy a raw saved plan to a
+public artifact.
 
 ## Non-deploying sequence
 
