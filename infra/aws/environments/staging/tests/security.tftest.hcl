@@ -49,8 +49,8 @@ run "private_single_node_foundation" {
     error_message = "Keep standard-support EKS and restrict public API access to reviewed operator IPs."
   }
   assert {
-    condition     = aws_eks_node_group.staging.scaling_config[0].desired_size == 1 && aws_eks_node_group.staging.scaling_config[0].max_size == 1 && toset(aws_eks_node_group.staging.instance_types) == toset(["t3.large"]) && aws_eks_node_group.staging.release_version == var.node_ami_release_version
-    error_message = "No implicit node scaling or moving AMI release."
+    condition     = aws_eks_node_group.staging.scaling_config[0].desired_size == var.worker_desired_size && aws_eks_node_group.staging.scaling_config[0].min_size == 1 && aws_eks_node_group.staging.scaling_config[0].max_size == 2 && toset(aws_eks_node_group.staging.instance_types) == toset(["t3.large"]) && aws_eks_node_group.staging.release_version == var.node_ami_release_version
+    error_message = "Keep bounded worker capacity and the reviewed AMI release."
   }
   assert {
     condition     = aws_launch_template.worker.metadata_options[0].http_tokens == "required" && aws_launch_template.worker.metadata_options[0].http_put_response_hop_limit == 1 && aws_launch_template.worker.credit_specification[0].cpu_credits == "standard" && aws_launch_template.worker.block_device_mappings[0].ebs[0].encrypted

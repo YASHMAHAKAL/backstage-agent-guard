@@ -16,14 +16,18 @@ account, S3 and Terraform's backend; `apply` would modify AWS. Neither
 command is part of normal Backstage startup, and this document is not
 authorization to run them. No `.env` token or private plan belongs in Git.
 
-The platform repository is private on GitHub Free. GitHub's required
-environment reviewers are not available for private repositories on that
-plan ([GitHub deployment-environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
-Do not describe an unprotected Actions dispatch as a two-person apply gate.
-Until a different repository/plan or stronger runner setup is chosen, the
-honest path is a separately credentialed local operator runner that consumes
-Backstage's exact-plan approval receipt. The local adapter exists, but the
-credential boundary and live end-to-end authorization have not been verified.
+The platform repository became public after a five-commit secret/history
+audit. Public GitHub Free repositories can use required environment reviewers
+([GitHub deployment-environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
+The GitHub-hosted [Terraform checks workflow](../.github/workflows/terraform-checks.yml)
+has no AWS or OIDC permission and runs only formatting, validation, mocked
+provider tests and preflight parser tests. It is **not** a plan/apply runner.
+The `terraform-apply` GitHub environment currently restricts deployments to
+`main`, but its requested reviewer was not retained by GitHub; it must not be
+treated as an approval gate until a real reviewer and prevent-self-review rule
+are verified. No AWS role, credential, state bucket, saved-plan transfer or
+Backstage-to-Actions approval bridge is connected. The separately credentialed
+local adapter remains available but has not been exercised against AWS.
 
 The runner requires a clean checkout at the reviewed merge commit, an owned
 mode-0700 artifact directory **outside** that checkout, fixed
@@ -37,10 +41,12 @@ The Backstage service token is configured only with the opt-in
 it to the `agent-guard` plugin and store it separately from the runner HMAC
 and approval keys. The platform backend's existing six Terraform settings
 must also be configured; see [control status](rizz-ai-terraform-control-status.md).
-This is a _local operator_ adapter; moving it into GitHub Actions requires a
-reachable Backstage service, protected workflow/branch, verified OIDC subject,
-least-privilege role and private durable plan artifact. Do not use a
-pull-request workflow with AWS authority.
+This is a _local operator_ adapter. A GitHub-hosted apply runner cannot reach
+the local Backstage `localhost` service. Moving apply into Actions requires a
+reviewed outbound approval/result bridge (or a securely hosted Backstage
+service), protected workflow/branch, verified OIDC subject, least-privilege
+role and private durable plan artifact. Do not use a pull-request workflow
+with AWS authority or copy a raw saved plan to a public artifact.
 
 ## Non-deploying sequence
 

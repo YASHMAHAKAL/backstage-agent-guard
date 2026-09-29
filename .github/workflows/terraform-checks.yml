@@ -1,0 +1,61 @@
+name: Terraform checks (no AWS authority)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/terraform-checks.yml'
+      - 'infra/aws/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/terraform-checks.yml'
+      - 'infra/aws/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.root }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        root:
+          - infra/aws/bootstrap
+          - infra/aws/registry
+          - infra/aws/environments/staging
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive infra/aws
+      - name: Initialize without remote state
+        working-directory: ${{ matrix.root }}
+        run: terraform init -backend=false -input=false -lockfile=readonly
+      - name: Validate configuration
+        working-directory: ${{ matrix.root }}
+        run: terraform validate -no-color
+      - name: Run mocked provider tests
+        working-directory: ${{ matrix.root }}
+        run: terraform test -no-color
+
+  preflight-tests:
+    name: Test bounded preflight parser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - run: node infra/aws/scripts/preflight.test.mjs

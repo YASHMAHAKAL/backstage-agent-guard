@@ -19,6 +19,15 @@ generated PR head, merged file value, and saved-plan worker change. Changing the
 tracked file is a Terraform configuration change, not an application replica
 change and not a deployment.
 
+The platform repository is now public, and a GitHub-hosted Terraform checks
+workflow is configured to validate the three roots without AWS credentials or
+OIDC. Its first remote run is not yet observed. The
+staging mock test now asserts the agreed one-to-two worker bound. The
+`terraform-apply` environment is restricted to `main`, but GitHub did not
+retain the requested reviewer, so it is not an active human gate. No
+GitHub-hosted plan/apply job exists. Public visibility alone cannot bridge a
+GitHub runner to the locally running Backstage approval service.
+
 `terraformPlan.ts` defines a private saved-plan binding for request, root,
 account, region, source commit, provider lock/config/variable/backend digests,
 state lineage and serial, plan artifact digest, runner identity and expiry. Its
