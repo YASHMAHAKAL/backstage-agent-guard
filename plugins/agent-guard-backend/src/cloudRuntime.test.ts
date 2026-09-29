@@ -9,6 +9,7 @@ import {
   releaseFixtureEnvelope,
 } from './testFixtures/cloudDeliveryFixture';
 import { createCloudRuntimeSnapshot } from './cloudRuntimeSnapshot';
+import { CloudFrozenSnapshot } from './cloudSnapshot';
 import { sha256 } from './snapshot';
 
 let certificate: ReturnType<typeof temporaryCertificate>;
@@ -69,7 +70,7 @@ function setup() {
     options,
     verify: () =>
       new CloudRuntimeVerifier(options).observe(
-        s.proposal.snapshot,
+        s.proposal.snapshot as CloudFrozenSnapshot,
         new AbortController().signal,
       ),
   };

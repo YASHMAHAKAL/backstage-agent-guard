@@ -47,11 +47,11 @@ function url() {
 async function main() {
   const [command, requestId, ...rest] = process.argv.slice(2);
   if (
-    !['plan', 'apply'].includes(command) ||
+    !['plan', 'wait', 'apply'].includes(command) ||
     !/^[a-f0-9-]{36}$/.test(requestId ?? '')
   )
     throw new Error(
-      'Usage: terraform-runner.cjs plan|apply <request-uuid> ...',
+      'Usage: terraform-runner.cjs plan|wait|apply <request-uuid> ...',
     );
   if (
     command === 'apply' &&
@@ -88,11 +88,34 @@ async function main() {
       throw new Error('Terraform runner service response exceeded limit');
     return JSON.parse(body);
   };
+  const runnerId = required('AGENT_GUARD_TERRAFORM_RUNNER_ID');
+  if (command === 'wait') {
+    if (rest.length) throw new Error('Wait accepts only a request ID');
+    const deadline = Date.now() + 24 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const review = await post('review-state', { requestId });
+      if (review?.state === 'approved') {
+        // A state label is not authorization. Retrieve and check the live
+        // receipt; apply will fetch and verify it again before execution.
+        const receipt = await post('receipt', { requestId });
+        if (
+          receipt?.approval?.binding?.requestId !== requestId ||
+          receipt.approval.binding.runnerId !== runnerId
+        )
+          throw new Error('Approved receipt is for another request or runner');
+        process.stdout.write('Exact plan approval is ready.\n');
+        return;
+      }
+      if (review?.state !== 'awaiting_review')
+        throw new Error('Plan review ended without an executable approval');
+      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 15000));
+    }
+    throw new Error('Plan review wait timed out; generate a new plan');
+  }
   const checkoutDirectory = resolve(required('AGENT_GUARD_TERRAFORM_CHECKOUT'));
   const privateArtifactDirectory = resolve(
     required('AGENT_GUARD_TERRAFORM_PRIVATE_ARTIFACT_DIR'),
   );
-  const runnerId = required('AGENT_GUARD_TERRAFORM_RUNNER_ID');
   if (command === 'plan') {
     if (rest.length !== 2 || !/^[a-f0-9]{40}$/.test(rest[1]))
       throw new Error('Plan needs the reviewed PR URL and merged commit');

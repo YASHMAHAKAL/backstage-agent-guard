@@ -9,14 +9,6 @@ const TEMPLATE_VERSION = 'agent-guard-v4-shared-staging-directory';
 // start a Scaffolder task after this feature is installed.
 const POLICY_VERSION = 'staging-review-v5-guarded-pr';
 
-type JsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
 export interface FrozenFile {
   path: string;
   content: string;
@@ -252,16 +244,27 @@ spec:
   },
 };
 
-export function canonicalize(value: JsonValue): string {
-  if (value === null || typeof value !== 'object') {
+export function canonicalize(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value))
+      throw new Error('Cannot canonicalize non-JSON number');
     return JSON.stringify(value);
   }
+  if (typeof value === 'string' || typeof value === 'boolean')
+    return JSON.stringify(value);
   if (Array.isArray(value)) {
     return `[${value.map(item => canonicalize(item)).join(',')}]`;
   }
-  return `{${Object.keys(value)
+  if (
+    typeof value !== 'object' ||
+    Object.prototype.toString.call(value) !== '[object Object]'
+  )
+    throw new Error('Cannot canonicalize non-JSON value');
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
     .sort()
-    .map(key => `${JSON.stringify(key)}:${canonicalize(value[key])}`)
+    .map(key => `${JSON.stringify(key)}:${canonicalize(record[key])}`)
     .join(',')}}`;
 }
 
@@ -336,7 +339,7 @@ export function createFrozenSnapshot(options: {
   };
   return {
     envelope,
-    digest: sha256(canonicalize(envelope as unknown as JsonValue)),
+    digest: sha256(canonicalize(envelope)),
     files,
   };
 }
@@ -357,7 +360,7 @@ export function snapshotHasIntegrity(snapshot: FrozenSnapshot): boolean {
     file => sha256(file.content) === file.sha256,
   );
   const envelopeFilesMatch =
-    canonicalize(snapshot.envelope.generatedFiles as unknown as JsonValue) ===
+    canonicalize(snapshot.envelope.generatedFiles) ===
     canonicalize(
       snapshot.files.map(file => ({ path: file.path, sha256: file.sha256 })),
     );
@@ -366,7 +369,6 @@ export function snapshotHasIntegrity(snapshot: FrozenSnapshot): boolean {
     intentSourceMatchesChannel &&
     fileHashesMatch &&
     envelopeFilesMatch &&
-    sha256(canonicalize(snapshot.envelope as unknown as JsonValue)) ===
-      snapshot.digest
+    sha256(canonicalize(snapshot.envelope)) === snapshot.digest
   );
 }

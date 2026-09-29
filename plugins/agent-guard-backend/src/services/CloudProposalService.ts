@@ -73,7 +73,6 @@ import {
   createCloudRetirementSnapshot,
   retirementInputSchema,
 } from '../cloudRetirement';
-import { retirementPolicyVersion } from '../cloudReviewPolicy';
 
 const statuses = [
   'needs_clarification',
@@ -1265,6 +1264,9 @@ export class CloudProposalService {
         return result('waiting_for_merge');
       const current = await readers.readGitops(this.target, signal);
       const base = cloudGitopsBaseSchema.parse(current.base);
+      const currentState = currentCloudStateSchema.safeParse(
+        current.currentState,
+      );
       if (
         !(await readers.isAncestor(
           this.target,
@@ -1273,7 +1275,8 @@ export class CloudProposalService {
           signal,
         )) ||
         !current.contents ||
-        current.currentState?.state !==
+        !currentState.success ||
+        currentState.data.state !==
           (stage === 'rizz_cloud_retire_ingress' ? 'retiring' : 'retired') ||
         snapshot.files.some(
           file =>
@@ -1662,12 +1665,18 @@ export class CloudProposalService {
           'Retirement target or cleanup evidence unavailable',
         );
       }
+      const currentBase = cloudGitopsBaseSchema.safeParse(current.base);
+      const currentState = currentCloudStateSchema.safeParse(
+        current.currentState,
+      );
       if (
+        !currentBase.success ||
+        !currentState.success ||
         canonicalize(this.target) !== canonicalize(snapshot.envelope.target) ||
-        canonicalize(current.base) !==
+        canonicalize(currentBase.data) !==
           canonicalize(snapshot.envelope.gitopsBase) ||
         !current.contents ||
-        current.currentState?.state !==
+        currentState.data.state !==
           (snapshot.envelope.kind === 'rizz_cloud_retire_ingress'
             ? 'present'
             : 'retiring') ||

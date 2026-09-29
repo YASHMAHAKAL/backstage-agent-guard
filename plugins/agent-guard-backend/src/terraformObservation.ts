@@ -54,7 +54,7 @@ export class AwsCliTerraformObserver implements TerraformAwsReader {
     this.run =
       options.run ??
       (async args => {
-        const env = {
+        const env: NodeJS.ProcessEnv = {
           ...process.env,
           AWS_EC2_METADATA_DISABLED: 'true',
           AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: 'true',

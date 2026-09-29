@@ -14,9 +14,10 @@ export function verifiedCloudDeployment(
   const snapshot = proposal.snapshot;
   if (
     proposal.status !== 'pr_open' ||
-    !(snapshot.envelope.kind === 'rizz_cloud_runtime_change'
-      ? cloudRuntimeSnapshotHasIntegrity(snapshot)
-      : cloudSnapshotHasIntegrity(snapshot)) ||
+    !(
+      cloudRuntimeSnapshotHasIntegrity(snapshot) ||
+      cloudSnapshotHasIntegrity(snapshot)
+    ) ||
     snapshot.envelope.proposalId !== proposal.id ||
     snapshot.envelope.requester !== proposal.requester ||
     proposal.decision?.decision !== 'approve' ||

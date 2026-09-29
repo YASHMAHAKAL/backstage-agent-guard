@@ -24,10 +24,20 @@ workflow validates the three roots without AWS credentials or OIDC. Its
 [first remote run](https://github.com/YASHMAHAKAL/backstage-agent-guard/actions/runs/36565654642)
 passed all four jobs on the public repository. The
 staging mock test now asserts the agreed one-to-two worker bound. The
-`terraform-apply` environment is restricted to `main`, but GitHub did not
-retain the requested reviewer, so it is not an active human gate. No
-GitHub-hosted plan/apply job exists. Public visibility alone cannot bridge a
-GitHub runner to the locally running Backstage approval service.
+`terraform-apply` environment is restricted to `main`, with
+`mystic-koragg` as its required reviewer and self-review prevention enabled.
+The collaborator invitation was accepted. The environment gate is configured,
+but no apply role, state bucket, reachable Backstage endpoint or enabled AWS
+workflow exists. The opt-in
+[reviewed-run workflow](../.github/workflows/terraform-reviewed-run.yml) is
+disabled by default. Public visibility alone cannot bridge a GitHub runner
+to the locally running Backstage approval service.
+The remote `main` branch now requires one approving review, dismissal of stale
+reviews, approval of the latest push, and the four existing Terraform check
+contexts; force pushes, deletions and administrator bypass are disabled. The
+new runner-contract check and CODEOWNERS file are still unmerged local changes.
+Require their checks and code-owner review only after a reviewed merge and a
+passing run establish those contexts on `main`.
 
 `terraformPlan.ts` defines a private saved-plan binding for request, root,
 account, region, source commit, provider lock/config/variable/backend digests,
@@ -98,10 +108,11 @@ Without all six `AGENT_GUARD_TERRAFORM_*` environment values (repo, dedicated
 GitHub read token, distinct runner and approval keys, expected AWS account ID,
 fixed runner ID), this area reports disabled.
 Do not enable it with development keys or claim an executable infrastructure
-workflow: protected runner deployment/dispatch, the actual state-bucket
-bootstrap, full independent run observation, drift and
-teardown controls are still outstanding. The operator handoff is in
-`docs/rizz-ai-terraform-runner.md`.
+workflow: the actual state-bucket bootstrap, separate OIDC role, HTTPS
+Backstage runner access, full independent run
+observation, drift and teardown controls are still outstanding. The local
+operator handoff is in `docs/rizz-ai-terraform-runner.md`, and the disabled
+GitHub Actions handoff is in `docs/rizz-ai-terraform-actions-predeploy.md`.
 
 Before any portal Apply/Destroy button is enabled, a designated runner with
 separate AWS authority must create a saved plan for a reviewed configuration

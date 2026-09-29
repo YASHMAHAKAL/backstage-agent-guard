@@ -1,0 +1,117 @@
+name: Terraform reviewed saved-plan run (disabled by default)
+
+# This workflow is inert until RIZZ_TERRAFORM_RUNNER_ENABLED is explicitly set
+# to true. It is not a PR workflow and never accepts arbitrary Terraform CLI
+# arguments. A human GitHub environment review happens before planning; the
+# separate Backstage review of the exact saved plan happens before apply.
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Backstage infrastructure request UUID
+        required: true
+        type: string
+      root:
+        description: Fixed Terraform root (must match the Backstage request)
+        required: true
+        type: choice
+        options: [registry, staging]
+      configuration_pr_url:
+        description: Reviewed and merged platform configuration PR URL
+        required: true
+        type: string
+      merged_commit:
+        description: Exact merged main commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+  id-token: write
+
+concurrency:
+  group: terraform-reviewed-${{ inputs.root }}
+  cancel-in-progress: false
+
+jobs:
+  exact-plan:
+    # A collaborator cannot dispatch and then self-approve the sole required
+    # environment review. The owner dispatches; mystic-koragg reviews.
+    if: >-
+      ${{ vars.RIZZ_TERRAFORM_RUNNER_ENABLED == 'true' &&
+          github.ref == 'refs/heads/main' &&
+          github.actor == 'YASHMAHAKAL' }}
+    environment: terraform-apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      AGENT_GUARD_TERRAFORM_REPOSITORY: YASHMAHAKAL/backstage-agent-guard
+      AGENT_GUARD_TERRAFORM_RUNNER_ID: github-terraform-apply-v1
+      AGENT_GUARD_TERRAFORM_AWS_PROFILE: rizz-terraform-runner
+      AGENT_GUARD_TERRAFORM_CHECKOUT: ${{ github.workspace }}
+      AGENT_GUARD_TERRAFORM_EXPECTED_ACCOUNT_ID: ${{ vars.RIZZ_AWS_ACCOUNT_ID }}
+      AGENT_GUARD_TERRAFORM_GITHUB_READ_TOKEN: ${{ github.token }}
+      AGENT_GUARD_RUNNER_BACKSTAGE_URL: ${{ vars.RIZZ_BACKSTAGE_RUNNER_URL }}
+      AGENT_GUARD_RUNNER_SERVICE_TOKEN: ${{ secrets.RIZZ_BACKSTAGE_RUNNER_SERVICE_TOKEN }}
+      AGENT_GUARD_TERRAFORM_RUNNER_KEY: ${{ secrets.RIZZ_TERRAFORM_RUNNER_KEY }}
+      AGENT_GUARD_TERRAFORM_APPROVAL_KEY: ${{ secrets.RIZZ_TERRAFORM_APPROVAL_KEY }}
+      AWS_SHARED_CREDENTIALS_FILE: ${{ runner.temp }}/rizz-terraform-aws-credentials
+      AWS_CONFIG_FILE: ${{ runner.temp }}/rizz-terraform-aws-config
+      AWS_EC2_METADATA_DISABLED: 'true'
+      AGENT_GUARD_REQUEST_ID: ${{ inputs.request_id }}
+      AGENT_GUARD_CONFIGURATION_PR_URL: ${{ inputs.configuration_pr_url }}
+      AGENT_GUARD_MERGED_COMMIT: ${{ inputs.merged_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Build the reviewed runner library
+        run: |
+          node .yarn/releases/yarn-4.13.0.cjs install --immutable
+          node .yarn/releases/yarn-4.13.0.cjs workspace @internal/backstage-plugin-agent-guard-backend build
+      - name: Prepare private registry inputs
+        if: ${{ inputs.root == 'registry' }}
+        env:
+          AGENT_GUARD_TERRAFORM_BACKEND_CONFIG: ${{ secrets.RIZZ_TERRAFORM_REGISTRY_BACKEND_HCL }}
+          AGENT_GUARD_TERRAFORM_TFVARS: ${{ secrets.RIZZ_TERRAFORM_REGISTRY_TFVARS }}
+        run: node scripts/terraform-ci-inputs.cjs registry
+      - name: Prepare private staging inputs
+        if: ${{ inputs.root == 'staging' }}
+        env:
+          AGENT_GUARD_TERRAFORM_BACKEND_CONFIG: ${{ secrets.RIZZ_TERRAFORM_STAGING_BACKEND_HCL }}
+          AGENT_GUARD_TERRAFORM_TFVARS: ${{ secrets.RIZZ_TERRAFORM_STAGING_TFVARS }}
+        run: node scripts/terraform-ci-inputs.cjs staging
+      - name: Acquire short-lived Terraform AWS role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.RIZZ_TERRAFORM_RUNNER_ROLE_ARN }}
+          allowed-account-ids: ${{ vars.RIZZ_AWS_ACCOUNT_ID }}
+          aws-profile: rizz-terraform-runner
+          overwrite-aws-profile: true
+          output-env-credentials: false
+          role-duration-seconds: 3600
+          disable-retry: true
+      - name: Create the private saved plan and register its redacted summary
+        run: >-
+          node scripts/terraform-runner.cjs plan
+          "$AGENT_GUARD_REQUEST_ID"
+          "$AGENT_GUARD_CONFIGURATION_PR_URL"
+          "$AGENT_GUARD_MERGED_COMMIT"
+      - name: Wait for separate Backstage exact-plan review
+        run: node scripts/terraform-runner.cjs wait "$AGENT_GUARD_REQUEST_ID"
+      - name: Apply only the approved saved plan
+        env:
+          AGENT_GUARD_ENABLE_TERRAFORM_APPLY: YES-I-AUTHORIZE-AWS-APPLY
+        run: >-
+          node scripts/terraform-runner.cjs apply
+          "$AGENT_GUARD_REQUEST_ID"
+          --execute-approved-plan
