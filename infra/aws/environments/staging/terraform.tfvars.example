@@ -3,6 +3,7 @@ expected_account_id    = "000000000000"
 operator_principal_arn = "arn:aws:iam::000000000000:role/replace-with-reviewed-operator"
 operator_public_cidrs  = ["203.0.113.10/32"] # Documentation address; replace privately.
 availability_zones     = ["us-east-1a", "us-east-1b"] # Verify account availability.
+cloud_reader_enabled   = false # Enable only in a separately reviewed saved plan.
 vpc_cidr               = "10.42.0.0/16" # Verify non-overlap with existing/VPN networks.
 # Intentionally INVALID placeholders: do not accidentally deploy guessed pins.
 addon_versions = {
