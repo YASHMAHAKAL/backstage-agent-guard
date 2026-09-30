@@ -1,6 +1,9 @@
-# EKS staging — local preparation only
+# EKS staging Terraform foundation
 
-Not applied to AWS. Mock tests do not establish permissions, regional availability, capacity, compatibility or deployment success. Existing Kind configuration is untouched.
+Apply requires explicit review of a saved plan. Live environment status belongs
+in the dated operator launch record. Mock tests do not establish permissions,
+regional availability, capacity, compatibility or deployment success. Existing
+Kind configuration is separate.
 
 ## Configuration
 
@@ -14,6 +17,32 @@ Not applied to AWS. Mock tests do not establish permissions, regional availabili
 - Three-day control-plane API/audit/authenticator logs. Default EKS API-data encryption is separate from encrypted worker disks; no additional KMS key created.
 
 ## Ownership and order
+
+### Optional Backstage observer
+
+`cloud_reader_enabled` defaults to `false`. A separately reviewed saved plan can
+create `rizz-staging-cloud-reader`, its inline read policy and a STANDARD EKS
+access entry mapping it to `rizz-cloud-observers`. Trust names only the existing
+reviewed operator principal, with one-hour sessions. No EKS access policy is
+associated. Install the reviewed namespace
+[`observer/rbac.yaml`](../../../cloud-platform/observer/rbac.yaml) separately
+before using the `rizz-cloud-reader` role profile. It grants no Kubernetes Secret
+reads or writes. Do not substitute the bootstrap administrator profile.
+
+The EKS group mapping follows [AWS's RBAC access-entry guidance](https://docs.aws.amazon.com/eks/latest/userguide/access-policies.html).
+Certificate tag conditions are supported by [ACM's authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_acm.html).
+
+AWS reads cover the named EKS cluster, tagged staging ACM certificates, the two
+staging ECR manifests, and regional EC2/ELB metadata required by the real cloud
+readers. Regional describe permissions expose more metadata than this one app;
+there is no IAM, secret-value, inference or mutation permission. The separate
+ECR-only release catalog role remains owned by the registry root. Configure the
+operator's scoped `sts:AssumeRole` grants and private profile settings only after
+review; enabling this variable does not grant the operator role-management rights.
+
+This opt-in code does not itself install RBAC, configure the portal, deploy an
+application or authorize a Terraform apply. See the dated launch card for live
+demo status; the preparation statements below describe the original module work.
 
 | Component | Owner |
 | --- | --- |

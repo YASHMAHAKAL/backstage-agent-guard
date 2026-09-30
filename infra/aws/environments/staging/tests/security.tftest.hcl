@@ -116,6 +116,37 @@ run "reject_world_open_api" {
   variables { operator_public_cidrs = ["0.0.0.0/0"] }
   expect_failures = [var.operator_public_cidrs]
 }
+run "cloud_reader_disabled_by_default" {
+  command = plan
+  assert {
+    condition     = length(aws_iam_role.cloud_reader) == 0 && length(aws_iam_role_policy.cloud_reader) == 0 && length(aws_eks_access_entry.cloud_reader) == 0
+    error_message = "Existing staging configuration must not silently acquire a reader identity."
+  }
+}
+run "cloud_reader_boundaries" {
+  command = plan
+  variables { cloud_reader_enabled = true }
+  assert {
+    condition     = jsondecode(aws_iam_role.cloud_reader[0].assume_role_policy).Statement[0].Principal.AWS == var.operator_principal_arn && aws_iam_role.cloud_reader[0].max_session_duration == 3600
+    error_message = "Only the explicit reviewed non-root operator may assume the short-session observer role."
+  }
+  assert {
+    condition     = aws_eks_access_entry.cloud_reader[0].type == "STANDARD" && aws_eks_access_entry.cloud_reader[0].kubernetes_groups == toset(["rizz-cloud-observers"]) && aws_eks_access_entry.cloud_reader[0].cluster_name == aws_eks_cluster.staging.name
+    error_message = "Map the observer to its RBAC group in the exact staging cluster."
+  }
+  assert {
+    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement : statement.Action])) == toset(["eks:DescribeCluster", "acm:DescribeCertificate", "acm:GetCertificate", "ec2:DescribeSecurityGroups", "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeListenerCertificates", "elasticloadbalancing:DescribeTags", "ecr:BatchGetImage"])
+    error_message = "The observer must have only the exact implemented metadata/manifest reads, never IAM, secret-value, deploy or mutation permissions."
+  }
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[0].Resource == [aws_eks_cluster.staging.arn] && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Project"] == "rizz-platform" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Environment"] == "staging" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[2].Condition.StringEquals["aws:RequestedRegion"] == "us-east-1"
+    error_message = "Bind cluster reads, tagged staging certificate reads and regional metadata reads."
+  }
+  assert {
+    condition     = toset(jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[3].Resource) == toset(["arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-frontend", "arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-backend"])
+    error_message = "ECR manifest access must cover only the reviewed image pair."
+  }
+}
 run "reject_subnet_operator_access" {
   command = plan
   variables { operator_public_cidrs = ["203.0.113.0/24"] }
