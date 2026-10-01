@@ -21,7 +21,7 @@ audit. Public GitHub Free repositories can use required environment reviewers
 ([GitHub deployment-environment availability](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)).
 The GitHub-hosted [Terraform checks workflow](../.github/workflows/terraform-checks.yml)
 has no AWS or OIDC permission and runs formatting, validation, mocked
-provider tests, preflight parser tests and runner-contract tests. It is
+provider tests, cloud chart-input tests and runner-contract tests. It is
 **not** a plan/apply runner.
 The `terraform-apply` GitHub environment restricts deployments to `main`,
 requires `mystic-koragg` review and prevents self-review. A separate,

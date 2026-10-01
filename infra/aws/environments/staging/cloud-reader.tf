@@ -36,6 +36,7 @@ resource "aws_iam_role_policy" "cloud_reader" {
         "elasticloadbalancing:DescribeLoadBalancers",
         "elasticloadbalancing:DescribeTargetGroups",
         "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeRules",
         "elasticloadbalancing:DescribeListenerCertificates",
         "elasticloadbalancing:DescribeTags"
       ],

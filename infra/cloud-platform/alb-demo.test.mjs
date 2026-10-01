@@ -39,13 +39,16 @@ test('offline fragment is HTTPS-only, one-host restricted and frontend-only', ()
   );
   assert.equal(annotations['alb.ingress.kubernetes.io/target-type'], 'ip');
   assert.equal(
+    annotations['alb.ingress.kubernetes.io/group.name'],
+    'rizz-staging-demo',
+  );
+  assert.equal(annotations['alb.ingress.kubernetes.io/ssl-redirect'], '443');
+  assert.equal(
     ingress.spec.rules[0].http.paths[0].backend.service.name,
     'rizz-frontend-service',
   );
   assert.equal(ingress.spec.rules[0].host, bootstrapHostname);
-  assert.ok(
-    !Object.keys(annotations).some(k => /group.name|security-groups/.test(k)),
-  );
+  assert.ok(!Object.keys(annotations).some(k => /security-groups/.test(k)));
   assert.equal(JSON.stringify(ingress).includes('rizz-backend-service'), false);
   assert.deepEqual(yaml.parse(yaml.stringify(ingress)), ingress);
 });

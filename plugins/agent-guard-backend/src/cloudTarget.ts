@@ -71,11 +71,13 @@ export function renderCloudIngress(target: CloudTarget) {
       name: 'rizz-frontend',
       namespace: t.namespace,
       annotations: {
+        'alb.ingress.kubernetes.io/group.name': 'rizz-staging-demo',
         'alb.ingress.kubernetes.io/load-balancer-name': 'rizz-staging-demo',
         'alb.ingress.kubernetes.io/scheme': 'internet-facing',
         'alb.ingress.kubernetes.io/ip-address-type': 'ipv4',
         'alb.ingress.kubernetes.io/target-type': 'ip',
         'alb.ingress.kubernetes.io/listen-ports': '[{"HTTPS":443}]',
+        'alb.ingress.kubernetes.io/ssl-redirect': '443',
         'alb.ingress.kubernetes.io/inbound-cidrs': t.ingress.operatorCidr,
         'alb.ingress.kubernetes.io/certificate-arn': t.ingress.certificateArn,
         'alb.ingress.kubernetes.io/ssl-policy':

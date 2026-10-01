@@ -118,6 +118,7 @@ run "reject_world_open_api" {
 }
 run "cloud_reader_disabled_by_default" {
   command = plan
+  variables { cloud_reader_enabled = false }
   assert {
     condition     = length(aws_iam_role.cloud_reader) == 0 && length(aws_iam_role_policy.cloud_reader) == 0 && length(aws_eks_access_entry.cloud_reader) == 0
     error_message = "Existing staging configuration must not silently acquire a reader identity."
@@ -135,7 +136,7 @@ run "cloud_reader_boundaries" {
     error_message = "Map the observer to its RBAC group in the exact staging cluster."
   }
   assert {
-    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement : statement.Action])) == toset(["eks:DescribeCluster", "acm:DescribeCertificate", "acm:GetCertificate", "ec2:DescribeSecurityGroups", "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeListenerCertificates", "elasticloadbalancing:DescribeTags", "ecr:BatchGetImage"])
+    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement : statement.Action])) == toset(["eks:DescribeCluster", "acm:DescribeCertificate", "acm:GetCertificate", "ec2:DescribeSecurityGroups", "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeRules", "elasticloadbalancing:DescribeListenerCertificates", "elasticloadbalancing:DescribeTags", "ecr:BatchGetImage"])
     error_message = "The observer must have only the exact implemented metadata/manifest reads, never IAM, secret-value, deploy or mutation permissions."
   }
   assert {

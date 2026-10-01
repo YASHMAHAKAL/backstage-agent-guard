@@ -391,7 +391,11 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     return JSON.parse(manifest) as unknown;
   }
 
-  async verifyTarget(raw: CloudTarget, signal: AbortSignal): Promise<void> {
+  async verifyTarget(
+    raw: CloudTarget,
+    signal: AbortSignal,
+    phase: 'initial' | 'deployed' = 'deployed',
+  ): Promise<void> {
     const t = cloudTargetSchema.parse(raw);
     const identity = z
       .object({ Account: z.literal(t.accountId), Arn: z.string() })
@@ -539,29 +543,26 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     );
     if (
       map['elbv2.k8s.aws/cluster'] !== t.clusterName ||
-      map['ingress.k8s.aws/stack'] !== `${t.namespace}/rizz-frontend`
+      map['ingress.k8s.aws/stack'] !== 'rizz-staging-demo'
     )
       throw new Error('ALB cluster or ingress association mismatch');
-    const listener = z
+    const listeners = z
       .object({
         Listeners: z
           .array(
             z.object({
               ListenerArn: z.string(),
               LoadBalancerArn: z.literal(lb.LoadBalancerArn),
-              Port: z.literal(443),
-              Protocol: z.literal('HTTPS'),
-              SslPolicy: z.literal('ELBSecurityPolicy-TLS13-1-2-2021-06'),
+              Port: z.number().int(),
+              Protocol: z.enum(['HTTP', 'HTTPS']),
+              SslPolicy: z.string().optional(),
               Certificates: z
-                .array(
-                  z.object({
-                    CertificateArn: z.literal(t.ingress.certificateArn),
-                  }),
-                )
-                .length(1),
+                .array(z.object({ CertificateArn: z.string() }))
+                .optional(),
             }),
           )
-          .length(1),
+          .min(1)
+          .max(2),
         NextMarker: z.undefined().optional(),
       })
       .parse(
@@ -574,34 +575,97 @@ export class AuthenticatedCloudReaders implements CloudReaders {
           ],
           signal,
         ),
-      ).Listeners[0];
+      ).Listeners;
+    if (
+      new Set(listeners.map(item => item.Port)).size !== listeners.length ||
+      listeners.some(
+        item =>
+          (item.Port !== 80 || item.Protocol !== 'HTTP') &&
+          (item.Port !== 443 || item.Protocol !== 'HTTPS'),
+      )
+    )
+      throw new Error('Unexpected ALB listener');
+    const listener = listeners.find(
+      item => item.Port === (phase === 'initial' ? 80 : 443),
+    );
+    if (!listener) throw new Error('Required ALB listener missing');
     if (
       !listener.ListenerArn.startsWith(
         `arn:aws:elasticloadbalancing:us-east-1:${t.accountId}:listener/app/rizz-staging-demo/`,
       )
     )
       throw new Error('Listener account mismatch');
-    z.object({
-      Certificates: z
-        .array(
-          z.object({
-            CertificateArn: z.literal(t.ingress.certificateArn),
-            IsDefault: z.literal(true),
-          }),
+    if (phase === 'initial') {
+      const rules = z
+        .object({
+          Rules: z
+            .array(
+              z.object({
+                Actions: z
+                  .array(
+                    z.object({
+                      Type: z.string(),
+                      FixedResponseConfig: z
+                        .object({ StatusCode: z.string() })
+                        .optional(),
+                    }),
+                  )
+                  .length(1),
+              }),
+            )
+            .min(1)
+            .max(10),
+          NextMarker: z.undefined().optional(),
+        })
+        .parse(
+          await this.aws(
+            ['elbv2', 'describe-rules', '--listener-arn', listener.ListenerArn],
+            signal,
+          ),
+        ).Rules;
+      if (
+        rules.some(
+          rule =>
+            rule.Actions[0].Type !== 'fixed-response' ||
+            !['404', '503'].includes(
+              rule.Actions[0].FixedResponseConfig?.StatusCode ?? '',
+            ),
+        ) ||
+        !rules.some(
+          rule => rule.Actions[0].FixedResponseConfig?.StatusCode === '503',
         )
-        .length(1),
-      NextMarker: z.undefined().optional(),
-    }).parse(
-      await this.aws(
-        [
-          'elbv2',
-          'describe-listener-certificates',
-          '--listener-arn',
-          listener.ListenerArn,
-        ],
-        signal,
-      ),
-    );
+      )
+        throw new Error('Bootstrap ALB listener may route traffic');
+    }
+    if (phase === 'deployed') {
+      if (
+        listener.SslPolicy !== 'ELBSecurityPolicy-TLS13-1-2-2021-06' ||
+        listener.Certificates?.length !== 1 ||
+        listener.Certificates[0].CertificateArn !== t.ingress.certificateArn
+      )
+        throw new Error('HTTPS listener certificate or policy mismatch');
+      z.object({
+        Certificates: z
+          .array(
+            z.object({
+              CertificateArn: z.literal(t.ingress.certificateArn),
+              IsDefault: z.literal(true),
+            }),
+          )
+          .length(1),
+        NextMarker: z.undefined().optional(),
+      }).parse(
+        await this.aws(
+          [
+            'elbv2',
+            'describe-listener-certificates',
+            '--listener-arn',
+            listener.ListenerArn,
+          ],
+          signal,
+        ),
+      );
+    }
     const sgs = z
       .object({
         SecurityGroups: z
@@ -614,8 +678,8 @@ export class AuthenticatedCloudReaders implements CloudReaders {
                 .array(
                   z.object({
                     IpProtocol: z.literal('tcp'),
-                    FromPort: z.literal(443),
-                    ToPort: z.literal(443),
+                    FromPort: z.number().int(),
+                    ToPort: z.number().int(),
                     IpRanges: z
                       .array(
                         z.object({ CidrIp: z.literal(t.ingress.operatorCidr) }),
@@ -626,7 +690,7 @@ export class AuthenticatedCloudReaders implements CloudReaders {
                     UserIdGroupPairs: z.array(z.unknown()).length(0),
                   }),
                 )
-                .max(1),
+                .max(2),
             }),
           )
           .min(1)
@@ -647,7 +711,19 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     if (
       new Set(sgs.map(sg => sg.GroupId)).size !== lb.SecurityGroups.length ||
       sgs.some(sg => !lb.SecurityGroups.includes(sg.GroupId)) ||
-      !sgs.some(sg => sg.IpPermissions.length === 1)
+      sgs.some(sg =>
+        sg.IpPermissions.some(
+          permission =>
+            permission.FromPort !== permission.ToPort ||
+            ![80, 443].includes(permission.FromPort),
+        ),
+      ) ||
+      !sgs.some(sg =>
+        sg.IpPermissions.some(
+          permission =>
+            permission.FromPort === (phase === 'initial' ? 80 : 443),
+        ),
+      )
     )
       throw new Error('Incomplete ALB security-group evidence');
   }

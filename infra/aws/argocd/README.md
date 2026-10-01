@@ -1,9 +1,12 @@
 # Terraform Argo CD bootstrap
 
 This root installs the existing reviewed Argo CD chart on `rizz-eks-staging`.
-Terraform owns the Argo Helm release and its upgrades; Argo still owns platform
-controller Applications and application workloads. This replaces the separate
-operator `helm install` step. It has not been applied to a live cluster.
+Terraform owns the Argo Helm release and its upgrades. Its private service,
+RBAC and resource settings are inline in the Helm values. The separate
+[Argo bootstrap root](../argo-bootstrap/README.md) owns Projects and
+Applications; Argo owns controller installations and application workloads.
+This replaces the separate operator `helm install` step. It has not been
+applied to a live cluster.
 
 The AWS foundation must be applied and verified first. The Helm provider needs
 an existing reachable Kubernetes API, so this root has its own state key:
@@ -61,18 +64,18 @@ private service/RBAC settings, and refusal to adopt unrelated releases.
 
 ## Remaining bootstrap and teardown ordering
 
-This root automates Argo installation. Project/Application registration, private
-GitOps authentication, administrator credential rotation, controller sync,
-HTTPS and the approved Rizz.AI release remain separate steps. Follow the existing
-[cloud bootstrap sequence](../../cloud-platform/README.md); successful Helm
-installation alone is not an application deployment.
+This root automates Argo installation. After its CRDs are ready, the
+[Argo bootstrap root](../argo-bootstrap/README.md) registers Projects and
+Applications, supplies the private read-only GitOps connection, and waits for
+platform controller health. Administrator credential rotation, HTTPS and the
+approved Rizz.AI release remain separate. Successful Helm installation alone
+is not an application deployment.
 
 During authorized teardown, remove application Ingresses and verify controller
-AWS cleanup first. Then remove Applications/controllers according to their
-reviewed deletion policies. Destroy this Argo root while EKS access and the
-worker still exist, then destroy the AWS foundation. Helm-created CRDs and the
-namespace can remain after uninstall and disappear with the subsequent dedicated
-cluster deletion. Keep registry and state retention decisions separate.
+AWS cleanup first. Remove the Argo bootstrap root while EKS and Argo still
+work, then destroy this Helm root while EKS access and the worker still exist.
+Destroy the AWS foundation last. Keep registry and state retention decisions
+separate.
 
 Provider behavior: [HashiCorp Helm provider authentication](https://github.com/hashicorp/terraform-provider-helm/blob/v3.2.0/docs/index.md)
 and [Helm release resource](https://github.com/hashicorp/terraform-provider-helm/blob/v3.2.0/docs/resources/release.md).

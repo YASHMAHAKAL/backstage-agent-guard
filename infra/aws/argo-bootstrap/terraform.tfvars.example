@@ -1,0 +1,7 @@
+aws_profile         = "rizz-platform"
+expected_account_id = "000000000000"
+operator_cidr        = "203.0.113.10/32"
+# Set false only in a separately reviewed retirement plan after the app Ingress is removed.
+# enable_alb_bootstrap = false
+# Supply TF_VAR_gitops_read_token from an ignored private environment file.
+# Increment gitops_credential_revision only when rotating that token.

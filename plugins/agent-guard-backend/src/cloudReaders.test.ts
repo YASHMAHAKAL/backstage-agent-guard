@@ -118,7 +118,7 @@ function awsFixture() {
             { Key: 'elbv2.k8s.aws/cluster', Value: target.clusterName },
             {
               Key: 'ingress.k8s.aws/stack',
-              Value: `${target.namespace}/rizz-frontend`,
+              Value: 'rizz-staging-demo',
             },
           ],
         },
@@ -139,6 +139,26 @@ function awsFixture() {
     'elbv2 describe-listener-certificates': {
       Certificates: [
         { CertificateArn: target.ingress.certificateArn, IsDefault: true },
+      ],
+    },
+    'elbv2 describe-rules': {
+      Rules: [
+        {
+          Actions: [
+            {
+              Type: 'fixed-response',
+              FixedResponseConfig: { StatusCode: '503' },
+            },
+          ],
+        },
+        {
+          Actions: [
+            {
+              Type: 'fixed-response',
+              FixedResponseConfig: { StatusCode: '404' },
+            },
+          ],
+        },
       ],
     },
     'ec2 describe-security-groups': {
@@ -198,6 +218,65 @@ it('verifies actual X509 bytes against synthetic AWS target evidence, using read
       ].includes(args[1]),
     ),
   ).toBe(true);
+});
+it('accepts the operator-only fixed-response ALB before the first GitOps release', async () => {
+  const h = awsFixture();
+  h.evidence['elbv2 describe-listeners'].Listeners = [
+    {
+      ListenerArn:
+        'arn:aws:elasticloadbalancing:us-east-1:000000000000:listener/app/rizz-staging-demo/abc/http',
+      LoadBalancerArn:
+        'arn:aws:elasticloadbalancing:us-east-1:000000000000:loadbalancer/app/rizz-staging-demo/abc',
+      Port: 80,
+      Protocol: 'HTTP',
+    },
+  ];
+  const permission =
+    h.evidence['ec2 describe-security-groups'].SecurityGroups[0]
+      .IpPermissions[0];
+  permission.FromPort = 80;
+  permission.ToPort = 80;
+  await expect(
+    h.reader.verifyTarget(target, signal(), 'initial'),
+  ).resolves.toBeUndefined();
+  expect(h.awsReader.mock.calls.map(([args]) => args[1])).toContain(
+    'describe-rules',
+  );
+  expect(h.awsReader.mock.calls.map(([args]) => args[1])).not.toContain(
+    'describe-listener-certificates',
+  );
+  permission.IpRanges[0].CidrIp = '0.0.0.0/0';
+  await expect(
+    h.reader.verifyTarget(target, signal(), 'initial'),
+  ).rejects.toThrow();
+  permission.IpRanges[0].CidrIp = target.ingress.operatorCidr;
+  h.evidence['elbv2 describe-rules'].Rules[0].Actions[0].Type = 'forward';
+  await expect(
+    h.reader.verifyTarget(target, signal(), 'initial'),
+  ).rejects.toThrow();
+});
+it('accepts a later HTTPS listener alongside the restricted bootstrap HTTP listener', async () => {
+  const h = awsFixture();
+  const https = h.evidence['elbv2 describe-listeners'].Listeners[0];
+  h.evidence['elbv2 describe-listeners'].Listeners.unshift({
+    ListenerArn:
+      'arn:aws:elasticloadbalancing:us-east-1:000000000000:listener/app/rizz-staging-demo/abc/http',
+    LoadBalancerArn: https.LoadBalancerArn,
+    Port: 80,
+    Protocol: 'HTTP',
+  });
+  const permissions =
+    h.evidence['ec2 describe-security-groups'].SecurityGroups[0].IpPermissions;
+  permissions.push({
+    ...structuredClone(permissions[0]),
+    FromPort: 80,
+    ToPort: 80,
+  });
+  await expect(
+    h.reader.verifyTarget(target, signal()),
+  ).resolves.toBeUndefined();
+  permissions[1].IpRanges[0].CidrIp = '0.0.0.0/0';
+  await expect(h.reader.verifyTarget(target, signal())).rejects.toThrow();
 });
 it.each([
   'root',
