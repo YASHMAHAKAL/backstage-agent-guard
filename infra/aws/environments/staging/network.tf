@@ -42,8 +42,8 @@ resource "aws_route" "internet" {
   gateway_id             = aws_internet_gateway.staging.id
 }
 resource "aws_route_table_association" "public" {
-  for_each       = aws_subnet.public
-  subnet_id      = each.value.id
+  for_each       = local.azs
+  subnet_id      = aws_subnet.public[each.key].id
   route_table_id = aws_route_table.public.id
 }
 resource "aws_eip" "nat" {
@@ -62,8 +62,8 @@ resource "aws_route" "egress" {
   nat_gateway_id         = aws_nat_gateway.staging.id
 }
 resource "aws_route_table_association" "private" {
-  for_each       = aws_subnet.private
-  subnet_id      = each.value.id
+  for_each       = local.azs
+  subnet_id      = aws_subnet.private[each.key].id
   route_table_id = aws_route_table.private.id
 }
 # Free S3 gateway routing reduces NAT processing for ECR image layer downloads.
