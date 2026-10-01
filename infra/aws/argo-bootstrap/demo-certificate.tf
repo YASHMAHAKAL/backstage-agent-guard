@@ -58,6 +58,7 @@ resource "aws_acm_certificate" "demo" {
   tags = {
     Project     = "rizz-platform"
     Environment = "staging"
+    ManagedBy   = "terraform"
     Purpose     = "temporary-demo-alb"
   }
 }
@@ -79,6 +80,7 @@ resource "aws_ssm_parameter" "demo_https_target" {
   tags = {
     Project     = "rizz-platform"
     Environment = "staging"
+    ManagedBy   = "terraform"
   }
 }
 
