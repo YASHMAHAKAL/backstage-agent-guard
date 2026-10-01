@@ -13,7 +13,7 @@ Official chart indices checked 2026-09-26:
 
 | Component | Chart / app | Owner |
 | --- | --- | --- |
-| Argo CD | 10.9.2 / v3.5.3 | Explicit platform operator Helm bootstrap and upgrades; not Terraform or self-managed Argo |
+| Argo CD | 10.9.2 / v3.5.3 | Separate [Terraform Helm bootstrap root](../aws/argocd/README.md); no Argo self-management |
 | AWS Load Balancer Controller | 3.5.0 / v3.5.0 | Argo platform Application; IAM/Pod Identity remain Terraform |
 | External Secrets Operator | 2.11.0 / v2.11.0 | Argo platform Application; IAM/secret metadata remain Terraform |
 
@@ -51,7 +51,7 @@ No command below is authority to provision or deploy. Follow [AWS gates](../aws/
 
 1. Provision only reviewed AWS foundation after explicit authorization. Confirm EKS node/add-ons ready, exact account/region/cluster and operator access. Use a separate cloud kubeconfig/context; **never current-context implicitly**. Verify endpoint/access entry against Terraform outputs. Keep Kind credentials/config unchanged.
 2. Fill ignored `config.local.json` with verified account/VPC/repo metadata. Reject credentials/extra fields. Inspect generated bootstrap privately; writing it to GitOps is a separately authorized reviewed operation. Desired handoff path: `clusters/eks-staging/platform/bootstrap.yaml`; not `apps/staging`.
-3. Operator installs the checksum-verified Argo chart once with `values/argo-cd.yaml`, explicit verified EKS context and `argocd` namespace. Later authorized command shape: `helm upgrade --install argocd /absolute/path/argo-cd-10.9.2.tgz --kube-context VERIFIED_EKS_CONTEXT --namespace argocd --create-namespace --values infra/cloud-platform/values/argo-cd.yaml --wait --timeout 10m`. This was **not run**. Keep admin/repo credentials out of command arguments/output/screenshots. Access via an explicit-context loopback port-forward; do not create a public LoadBalancer for Argo.
+3. Install the checksum-verified Argo chart once through the separate [Terraform Argo root](../aws/argocd/README.md), after EKS/node/add-on readiness. It reuses `values/argo-cd.yaml`, authenticates explicitly to EKS and waits for pods/jobs. This replaces the direct Helm operator installation; do not use both owners. Existing unmanaged releases require reviewed ownership reconciliation/import. Keep admin/repo credentials out of command arguments/output/screenshots. Access via an explicit-context loopback port-forward; do not create a public LoadBalancer for Argo.
 4. Apply only reviewed bootstrap to that EKS context; create app namespace before ESO namespaced RBAC. Install project-scoped, read-only GitOps authentication privately. App repo builds and Backstage must never receive Argo administrator credentials. Changing the default project is safe only on this newly dedicated Argo installation, not the existing Kind instance.
 5. Manually sync ESO and ALB controller separately. Wait for CRDs/webhooks/Deployments ready before creating custom resources or Ingress. Explicit VPC/region prevents IMDS discovery; SA names must match Terraform Pod Identities. Check pod credential behavior privately, never dump identity token/env. Test controller access; local policy validation does not prove AWS IAM authorization.
 6. Operator stores runtime JSON in Secrets Manager using its secured console/private workflow: keys `gen-ai-key`, `demo-username`, `demo-password`. Do not put values in Terraform, CLI arguments, YAML, Jev or images. Review password strength and provider limits; no Gemini call is needed for readiness.

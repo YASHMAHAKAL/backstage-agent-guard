@@ -16,6 +16,13 @@ Verify Ingress plus actual AWS ALB/listeners/target groups/controller-owned secu
 
 Handle namespace/ExternalSecret cleanup; deleting Kubernetes Secret does not delete AWS secret. Record retention decisions without reading/exposing values.
 
+For installations owned by the new `infra/aws/argocd` Terraform root, remove
+Applications/controllers after their AWS cleanup, then destroy the Argo root
+while EKS API access and the worker are still available. Destroy the staging
+foundation afterward. Removing EKS first leaves the Helm provider unable to
+uninstall its tracked release. Direct operator Helm and Terraform must not both
+own the same Argo installation.
+
 ## Review exact destroy plan
 
 After verifying this root's backend/private inputs and receiving plan authority, future commands are:
