@@ -2,8 +2,9 @@
 
 This root owns the two bootstrap namespaces, the closed Argo `default` project,
 the `rizz-platform` and `rizz-app` projects, three Applications, the private
-read-only GitOps repository connection and a fixed-response ALB bootstrap
-Ingress. It does not install Argo CD itself or apply Rizz.AI workload
+read-only GitOps repository connection, a fixed-response ALB bootstrap
+Ingress, a temporary imported ACM certificate and a public-metadata SSM
+parameter. It does not install Argo CD itself or apply Rizz.AI workload
 manifests. The Argo Helm root must be applied first so
 its `Application` and `AppProject` CRDs exist **before this root is planned**.
 Terraform's Kubernetes provider queries custom-resource schemas at plan time.
@@ -40,17 +41,41 @@ After the Load Balancer Controller becomes healthy, the Terraform-managed
 `rizz-alb-bootstrap` Ingress creates the ALB with an operator-IP-only HTTP
 listener returning fixed 503. It exposes no app workload. **The ALB is billable
 even though the Terraform plan shows only a Kubernetes Ingress.** Its DNS name
-is an output. The operator can then create/import the hostname-matched
-self-signed ACM certificate privately and configure the reviewed Backstage
-target. The first app PR adds a separate HTTPS-only Ingress in the same fixed
+is an output. In the same reviewed apply, Terraform reads the observed ALB,
+checks its DNS name and VPC, generates a 48-hour self-signed certificate with
+that exact DNS SAN, and imports it into ACM. The RSA key exists only as a
+Terraform ephemeral value passed to two write-only provider fields. It is not
+saved in the plan, state, SSM or Backstage configuration. Terraform publishes
+only the hostname, ACM ARN, account, cluster and operator CIDR at the standard
+SSM parameter `/rizz/staging/https-target`. The dedicated cloud reader needs
+`ssm:GetParameter` on only that ARN; Backstage checks the SSM data against its
+configured account/CIDR and independently verifies the live ALB and ACM
+certificate. The first app PR adds a separate HTTPS-only Ingress in the same fixed
 IngressGroup and enables HTTP-to-HTTPS redirect; Argo owns that app Ingress.
 The bootstrap Ingress remains during releases. For staged retirement, first
 merge the reviewed app Ingress removal and perform the documented Argo sync
 with pruning. Then review a separate plan setting `enable_alb_bootstrap=false`;
-applying it removes only this fixed-response Ingress while the controller is
-still running. Verify the ALB and target groups are gone before completing the
+applying it removes the fixed-response Ingress, ACM certificate and SSM
+metadata while the controller is still running. Verify the ALB and target
+groups are gone before completing the
 retirement check. This switch is a retirement operation; normal app releases
 do not require a Terraform plan.
+
+Before a live plan, the named operator must have reviewed authority for
+`elasticloadbalancing:DescribeLoadBalancers` and
+`elasticloadbalancing:DescribeTags` on `*` in us-east-1,
+`acm:ImportCertificate`, `acm:DescribeCertificate`, `acm:ListTagsForCertificate`,
+`acm:AddTagsToCertificate`, `acm:RemoveTagsFromCertificate` and
+`acm:DeleteCertificate` for this temporary certificate lifecycle, plus
+`ssm:PutParameter`, `ssm:GetParameter`, `ssm:DeleteParameter`,
+`ssm:AddTagsToResource`, `ssm:RemoveTagsFromResource` and
+`ssm:ListTagsForResource` on the exact parameter ARN. Scope new ACM imports to
+`arn:aws:acm:us-east-1:ACCOUNT:certificate/*` with request-tag conditions;
+scope later certificate reads and deletion with resource-tag conditions.
+The current operator policy must be checked and updated separately before any
+live plan; this code change does not grant permissions. Review each saved plan
+under the platform Terraform controls. After the certificate expires, a later
+plan can propose replacement; do not rotate it silently during the demo.
 
 The Argo `default` project is created by Argo at startup. The declarative
 `import` block adopts only that existing project, then closes it. If it is

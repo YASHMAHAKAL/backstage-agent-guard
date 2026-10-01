@@ -27,11 +27,7 @@ export interface Config {
         gitopsPath: string;
         argoApplication: string;
         ingress: {
-          stage: string;
-          hostname: string;
           operatorCidr: string;
-          certificateArn: string;
-          certificateSha256: string;
         };
       };
     };

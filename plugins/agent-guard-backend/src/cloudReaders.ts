@@ -2,7 +2,11 @@ import { execFile } from 'node:child_process';
 import { X509Certificate, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z } from 'zod/v3';
-import { CloudTarget, cloudTargetSchema } from './cloudTarget';
+import {
+  CloudTarget,
+  cloudTargetMetadataSchema,
+  cloudTargetSchema,
+} from './cloudTarget';
 import {
   cloudGitopsBaseSchema,
   inspectCloudGitopsFiles,
@@ -13,6 +17,7 @@ import { readCloudHttpsJson } from './cloudHttps';
 
 const exec = promisify(execFile);
 const gitSha = z.string().regex(/^[a-f0-9]{40}$/);
+const metadataName = '/rizz/staging/https-target';
 type AwsRead = (args: string[], signal: AbortSignal) => Promise<unknown>;
 
 export class AuthenticatedCloudReaders implements CloudReaders {
@@ -24,6 +29,7 @@ export class AuthenticatedCloudReaders implements CloudReaders {
       awsReader?: AwsRead;
       fetcher?: typeof fetch;
       now?: () => number;
+      requireMetadata?: boolean;
     },
   ) {
     if (
@@ -74,6 +80,87 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     } catch {
       throw new Error('Cloud AWS read unavailable');
     }
+  }
+
+  private async readHttpsMetadata(signal: AbortSignal) {
+    const response = z
+      .object({
+        Parameter: z.object({
+          Name: z.literal(metadataName),
+          Type: z.literal('String'),
+          Value: z.string().min(1).max(2048),
+        }),
+      })
+      .parse(
+        await this.aws(
+          ['ssm', 'get-parameter', '--name', metadataName],
+          signal,
+        ),
+      );
+    return z
+      .object({
+        schemaVersion: z.literal(1),
+        accountId: z.string().regex(/^[0-9]{12}$/),
+        clusterName: z.literal('rizz-eks-staging'),
+        hostname: z.string(),
+        certificateArn: z.string(),
+        operatorCidr: z.string(),
+      })
+      .strict()
+      .parse(JSON.parse(response.Parameter.Value));
+  }
+
+  async resolveTarget(raw: unknown, signal: AbortSignal): Promise<CloudTarget> {
+    if (!this.options.requireMetadata)
+      throw new Error('Cloud HTTPS metadata lookup is disabled');
+    const base = cloudTargetMetadataSchema.parse(raw);
+    const metadata = await this.readHttpsMetadata(signal);
+    if (
+      metadata.accountId !== base.accountId ||
+      metadata.clusterName !== base.clusterName ||
+      metadata.operatorCidr !== base.ingress.operatorCidr
+    )
+      throw new Error('Cloud HTTPS metadata differs from operator target');
+    const targetWithoutFingerprint = {
+      ...base,
+      ingress: {
+        stage: 'ready' as const,
+        hostname: metadata.hostname,
+        operatorCidr: base.ingress.operatorCidr,
+        certificateArn: metadata.certificateArn,
+      },
+    };
+    // Validate the untrusted SSM fields before passing an ARN to the AWS API.
+    cloudTargetSchema.parse({
+      ...targetWithoutFingerprint,
+      ingress: {
+        ...targetWithoutFingerprint.ingress,
+        certificateSha256: `sha256:${'0'.repeat(64)}`,
+      },
+    });
+    const cert = z
+      .object({ Certificate: z.string().min(1).max(32768) })
+      .parse(
+        await this.aws(
+          [
+            'acm',
+            'get-certificate',
+            '--certificate-arn',
+            metadata.certificateArn,
+          ],
+          signal,
+        ),
+      );
+    const fingerprint = `sha256:${createHash('sha256')
+      .update(new X509Certificate(cert.Certificate).raw)
+      .digest('hex')}`;
+    return cloudTargetSchema.parse({
+      ...targetWithoutFingerprint,
+      ingress: {
+        ...targetWithoutFingerprint.ingress,
+        certificateSha256: fingerprint,
+      },
+    });
   }
 
   async readClusterConnection(raw: CloudTarget, signal: AbortSignal) {
@@ -397,6 +484,17 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     phase: 'initial' | 'deployed' = 'deployed',
   ): Promise<void> {
     const t = cloudTargetSchema.parse(raw);
+    if (this.options.requireMetadata) {
+      const metadata = await this.readHttpsMetadata(signal);
+      if (
+        metadata.accountId !== t.accountId ||
+        metadata.clusterName !== t.clusterName ||
+        metadata.hostname !== t.ingress.hostname ||
+        metadata.certificateArn !== t.ingress.certificateArn ||
+        metadata.operatorCidr !== t.ingress.operatorCidr
+      )
+        throw new Error('Cloud HTTPS metadata changed since target resolution');
+    }
     const identity = z
       .object({ Account: z.literal(t.accountId), Arn: z.string() })
       .parse(await this.aws(['sts', 'get-caller-identity'], signal));

@@ -34,7 +34,7 @@ The Terraform budget is an account-wide monthly alert, not a project-only real-t
 | Access                | Reviewed operator IPv4 `/32` for EKS and ALB; explicit operator IAM principal. No open-to-world workaround if home IP changes.                                                  |
 | Release prerequisites | Review local Rizz.AI source/workflow changes before publication; replace the old direct-deploy workflow safely. ECR/OIDC must exist before a real trusted image-publishing run. |
 | Review/observation    | Actual distinct platform-team reviewer mapping; separately reviewed reader IAM/EKS access and observer RBAC. Prepared RBAC files do not grant access by themselves.             |
-| Secrets/TLS           | Operator-controlled Gemini value outside Terraform/Git; two-stage imported self-signed ACM/ALB DNS procedure; trust/fingerprint configured before a ready release target.       |
+| Secrets/TLS           | Operator-controlled Gemini value outside Terraform/Git; Terraform observes the ALB DNS and imports a temporary self-signed ACM certificate using an ephemeral private key; Backstage resolves public SSM metadata and verifies ACM before release.       |
 | Spending              | Accepted numeric allowance, run window, alert recipient, resource retention decision and scope-specific teardown procedure.                                                     |
 | Authorization         | Human reviews actual saved plan for each root and explicitly authorizes that unchanged plan. A mock plan, status flag or chat “continue” is not an apply gate.                  |
 

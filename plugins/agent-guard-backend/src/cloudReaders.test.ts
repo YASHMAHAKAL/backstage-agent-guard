@@ -219,6 +219,54 @@ it('verifies actual X509 bytes against synthetic AWS target evidence, using read
     ),
   ).toBe(true);
 });
+it('resolves Terraform HTTPS metadata and rejects forged or changed SSM handoff', async () => {
+  const h = awsFixture();
+  const parameter = {
+    schemaVersion: 1,
+    accountId: target.accountId,
+    clusterName: target.clusterName,
+    hostname: target.ingress.hostname,
+    certificateArn: target.ingress.certificateArn,
+    operatorCidr: target.ingress.operatorCidr,
+  };
+  h.evidence['ssm get-parameter'] = {
+    Parameter: {
+      Name: '/rizz/staging/https-target',
+      Type: 'String',
+      Value: JSON.stringify(parameter),
+    },
+  };
+  const reader = new AuthenticatedCloudReaders({
+    awsProfile: 'fixture-reader',
+    githubToken: 'not-live',
+    awsReader: h.awsReader,
+    requireMetadata: true,
+  });
+  const { ingress: _ingress, ...base } = target;
+  const configured = {
+    ...base,
+    ingress: { operatorCidr: target.ingress.operatorCidr },
+  };
+  const resolved = await reader.resolveTarget(configured, signal());
+  expect(resolved).toEqual(target);
+  await expect(
+    reader.verifyTarget(resolved, signal()),
+  ).resolves.toBeUndefined();
+
+  parameter.hostname = 'other-1234567890.us-east-1.elb.amazonaws.com';
+  h.evidence['ssm get-parameter'].Parameter.Value = JSON.stringify(parameter);
+  await expect(reader.verifyTarget(resolved, signal())).rejects.toThrow(
+    /metadata changed/,
+  );
+  await expect(reader.resolveTarget(configured, signal())).resolves.not.toEqual(
+    target,
+  );
+  parameter.accountId = '111111111111';
+  h.evidence['ssm get-parameter'].Parameter.Value = JSON.stringify(parameter);
+  await expect(reader.resolveTarget(configured, signal())).rejects.toThrow(
+    /metadata differs/,
+  );
+});
 it('accepts the operator-only fixed-response ALB before the first GitOps release', async () => {
   const h = awsFixture();
   h.evidence['elbv2 describe-listeners'].Listeners = [

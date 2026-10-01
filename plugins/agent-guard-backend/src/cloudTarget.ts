@@ -19,7 +19,7 @@ const singleHost = z.string().refine(value => {
 
 // Backend-owned configuration, NOT agent input. Parsing checks shape, not live
 // AWS state, authenticated identity, certificate ownership or reviewer rights.
-export const cloudTargetSchema = z
+const cloudTargetFields = z
   .object({
     id: z.literal('eks-staging'),
     accountId: z.string().regex(/^[0-9]{12}$/),
@@ -36,7 +36,7 @@ export const cloudTargetSchema = z
     argoApplication: z.literal('rizz-ai-staging'),
     ingress: z
       .object({
-        // Bootstrap belongs to the explicit operator procedure, not an app release.
+        // Bootstrap belongs to the reviewed Terraform apply, not an app release.
         stage: z.literal('ready'),
         hostname: z
           .string()
@@ -53,11 +53,19 @@ export const cloudTargetSchema = z
       })
       .strict(),
   })
-  .strict()
-  .refine(
-    target => target.ingress.certificateArn.split(':')[4] === target.accountId,
-    'Certificate account must match target account',
-  );
+  .strict();
+
+// Operator-owned identity and CIDR remain configuration; Terraform publishes
+// only the observed ALB name and certificate ARN in a fixed SSM parameter.
+export const cloudTargetMetadataSchema = cloudTargetFields
+  .omit({ ingress: true })
+  .extend({ ingress: z.object({ operatorCidr: singleHost }).strict() })
+  .strict();
+
+export const cloudTargetSchema = cloudTargetFields.refine(
+  target => target.ingress.certificateArn.split(':')[4] === target.accountId,
+  'Certificate account must match target account',
+);
 
 export type CloudTarget = z.infer<typeof cloudTargetSchema>;
 

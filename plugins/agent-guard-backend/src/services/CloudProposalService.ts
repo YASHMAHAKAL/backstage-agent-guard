@@ -113,6 +113,7 @@ export const currentCloudStateSchema = z.discriminatedUnion('state', [
 // independent AWS/ACM/ALB/GitHub reads, never config claims or agent JSON as proof.
 export interface CloudReaders {
   mode: 'authenticated' | 'fixture';
+  resolveTarget?(raw: unknown, signal: AbortSignal): Promise<CloudTarget>;
   verifyTarget(
     target: CloudTarget,
     signal: AbortSignal,
@@ -230,11 +231,19 @@ export class CloudProposalService {
     logger: LoggerService;
     configuration: CloudServiceConfiguration;
   }) {
-    const target = cloudTargetSchema.parse(options.configuration.target);
     if (options.configuration.readers.mode !== 'authenticated')
       throw new ServiceUnavailableError(
         'Authenticated cloud readers are required',
       );
+    const target = cloudTargetSchema.safeParse(options.configuration.target)
+      .success
+      ? cloudTargetSchema.parse(options.configuration.target)
+      : await options.configuration.readers.resolveTarget?.(
+          options.configuration.target,
+          AbortSignal.timeout(10000),
+        );
+    if (!target)
+      throw new ServiceUnavailableError('Cloud HTTPS metadata unavailable');
     z.array(z.string().regex(/^group:default\/[a-z0-9][a-z0-9-]*$/))
       .min(1)
       .max(10)

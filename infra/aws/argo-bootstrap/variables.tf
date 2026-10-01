@@ -40,6 +40,16 @@ variable "enable_alb_bootstrap" {
   default     = true
 }
 
+variable "demo_certificate_revision" {
+  description = "Reviewed version of the temporary demo certificate. Increment only in a separately reviewed replacement plan."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.demo_certificate_revision >= 1 && floor(var.demo_certificate_revision) == var.demo_certificate_revision
+    error_message = "Certificate revision must be a positive integer."
+  }
+}
+
 variable "gitops_read_token" {
   description = "Read-only fine-grained token for the one private GitOps repository. Supply as TF_VAR_gitops_read_token at plan and apply; never in a tfvars file."
   type        = string
