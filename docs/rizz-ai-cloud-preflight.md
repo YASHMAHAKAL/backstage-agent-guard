@@ -38,17 +38,20 @@ The Terraform budget is an account-wide monthly alert, not a project-only real-t
 | Spending              | Accepted numeric allowance, run window, alert recipient, resource retention decision and scope-specific teardown procedure.                                                     |
 | Authorization         | Human reviews actual saved plan for each root and explicitly authorizes that unchanged plan. A mock plan, status flag or chat “continue” is not an apply gate.                  |
 
-The [bounded preflight](../infra/aws/scripts/preflight.mjs) checks the exact new/legacy ECR and EKS names, VPC Name tags, publisher role, GitHub OIDC metadata and proposed state bucket. It only calls metadata operations with the fixed profile/region and emits sanitized status labels. Access denied/timeouts are unknown. A present bucket requires ownership/state reconciliation; 404 does not prove bucket-name availability. `safeToReviewPlan` only permits further **human plan review**; `inventoryComplete: false` explicitly records that this is not a full inventory.
+The old bounded preflight script has been retired. For each root, inspect the
+actual state and target resources, then review that root's guarded saved plan.
+The Terraform guards check the expected account and target; they are not an
+AWS inventory. Access denied or missing state is **unknown**, not evidence of
+absence. Untagged resources, ALBs, NAT gateways, volumes and IPs still require
+scoped reconciliation. Do not read or print secret values for inventory.
 
-Untagged/renamed resources, other IAM roles, runtime secret metadata, ALBs, NAT gateways, volumes, IPs and actual Terraform state need additional scoped reconciliation. Never conclude the account is empty from a passing bounded check. Do not request or print secret values for inventory.
-
-Supply `RIZZ_AWS_EXPECTED_ACCOUNT_ID` and `RIZZ_AWS_STATE_BUCKET` through a private operator environment (never in committed examples). The ignored `.env.aws.local` is the local input file; fill its blank fields privately. Confirm the account against the intended AWS console account, not just whatever credentials authenticate. It contains no access keys. Then, after confirming the intended target, the read-only command from the project root is:
-
-```bash
-node --env-file=.env.aws.local infra/aws/scripts/preflight.mjs
-```
-
-If private inputs are missing, the script exits before making AWS calls. Do not derive the expected account from whichever default credentials happen to work; compare with the intended account privately.
+The new [Argo bootstrap root](../infra/aws/argo-bootstrap/README.md) can be
+planned only after the Argo Helm release has installed its CRDs. Its first
+saved plan configures Argo Projects, Applications, a write-only private
+GitOps repository credential, and a fixed-response Ingress that causes a
+billable ALB. That ALB reveals the DNS name needed for the demo certificate.
+Rizz.AI's first approved Backstage GitOps PR creates the application manifests
+and HTTPS Ingress; application releases do not run Terraform.
 
 ## Ordered live handoff — requires separate authorizations
 

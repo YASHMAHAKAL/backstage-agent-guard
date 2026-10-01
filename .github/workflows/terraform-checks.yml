@@ -27,6 +27,7 @@ jobs:
           - infra/aws/registry
           - infra/aws/environments/staging
           - infra/aws/argocd
+          - infra/aws/argo-bootstrap
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,15 +51,19 @@ jobs:
         working-directory: ${{ matrix.root }}
         run: terraform test -no-color
 
-  preflight-tests:
-    name: Test bounded preflight parser
+  cloud-chart-tests:
+    name: Test cloud chart inputs
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: node infra/aws/scripts/preflight.test.mjs
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: node .yarn/releases/yarn-4.13.0.cjs install --immutable
+      - run: node --test infra/cloud-platform/charts.test.mjs
 
   runner-contract-tests:
     name: Test Terraform runner contract

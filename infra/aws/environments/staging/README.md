@@ -44,18 +44,25 @@ This opt-in code does not itself install RBAC, configure the portal, deploy an
 application or authorize a Terraform apply. See the dated launch card for live
 demo status; the preparation statements below describe the original module work.
 
-| Component | Owner |
-| --- | --- |
-| Network/EKS/workers/access/IAM/secret metadata | Terraform, this root; never app release CI |
-| CNI, kube-proxy, Pod Identity Agent, CoreDNS | Terraform EKS managed add-ons; no competing Helm owner |
-| Argo CD | Separate [Terraform Helm bootstrap root](../../argocd/README.md); owns installation/upgrades after EKS readiness, no Argo self-management |
-| Load Balancer Controller / External Secrets Operator | Restricted Argo platform Application, cloud GitOps path |
-| SecretStore/ExternalSecret/Rizz workloads | Restricted app/platform Applications with explicit cloud destinations |
-| Secret values | Authorized operator in Secrets Manager; never Terraform/Git/Jev |
+| Component                                            | Owner                                                                                                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Network/EKS/workers/access/IAM/secret metadata       | Terraform, this root; never app release CI                                                                                                |
+| CNI, kube-proxy, Pod Identity Agent, CoreDNS         | Terraform EKS managed add-ons; no competing Helm owner                                                                                    |
+| Argo CD                                              | Separate [Terraform Helm bootstrap root](../../argocd/README.md); owns installation/upgrades after EKS readiness, no Argo self-management |
+| Load Balancer Controller / External Secrets Operator | Terraform-managed Argo platform Applications; Argo owns Helm installations                                                                |
+| SecretStore/ExternalSecret/Rizz workloads            | Backstage-generated GitOps PR, then restricted Rizz Argo Application                                                                      |
+| Secret values                                        | Authorized operator in Secrets Manager; never Terraform/Git/Jev                                                                           |
 
 Verify cluster/node/access first, bootstrap Argo, configure read-only private GitOps credentials and constrained AppProjects, install controllers, test identity/secret sync, then deploy application Ingress. Use `external-secrets/external-secrets` to match the Terraform Pod Identity. Operator port-forward is initial Argo access, not public ingress.
 
-Argo/controller values and generated AppProjects/Applications are now [prepared locally](../../../cloud-platform/README.md). This root also prepares a dedicated ALB-controller Pod Identity and narrowed versioned IAM policy. **Still unimplemented:** actual installations, reviewed publication of cloud GitOps paths, app release golden path and live verification. ESO IAM/association is code, not an installed operator. Verify actual ESO Pod Identity behavior. Terraform must not also own controller-created ALBs.
+Argo settings live in the separate Helm root; bootstrap namespaces,
+AppProjects and Applications live in the separate
+[Argo bootstrap root](../../argo-bootstrap/README.md). This foundation root
+prepares a dedicated ALB-controller Pod Identity and narrowed versioned IAM
+policy. These new Terraform roots have not been applied to a live cluster;
+the earlier operator installation was torn down.
+Verify actual ESO Pod Identity behavior and the cloud release path before
+claiming deployment. Terraform must not also own controller-created ALBs.
 
 Pre-compute add-ons and CNI Pod Identity depend on working reconciliation/identity-agent scheduling; CoreDNS follows the worker. Mock tests do not prove live ordering. Inspect live conditions during authorized provisioning; do not attach CNI permissions to all nodes ad hoc to hide a failed bootstrap.
 

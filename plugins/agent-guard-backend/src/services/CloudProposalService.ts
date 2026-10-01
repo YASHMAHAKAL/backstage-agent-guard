@@ -113,7 +113,11 @@ export const currentCloudStateSchema = z.discriminatedUnion('state', [
 // independent AWS/ACM/ALB/GitHub reads, never config claims or agent JSON as proof.
 export interface CloudReaders {
   mode: 'authenticated' | 'fixture';
-  verifyTarget(target: CloudTarget, signal: AbortSignal): Promise<void>;
+  verifyTarget(
+    target: CloudTarget,
+    signal: AbortSignal,
+    phase?: 'initial' | 'deployed',
+  ): Promise<void>;
   readGitops(
     target: CloudTarget,
     signal: AbortSignal,
@@ -367,17 +371,21 @@ export class CloudProposalService {
       // even if an adapter accidentally fails to honor the signal.
       return await Promise.race([
         (async () => {
-          await this.options.configuration.readers.verifyTarget(
-            this.target,
-            controller.signal,
-          );
           const observed = await this.options.configuration.readers.readGitops(
             this.target,
             controller.signal,
           );
+          const currentState = currentCloudStateSchema.parse(
+            observed.currentState,
+          );
+          await this.options.configuration.readers.verifyTarget(
+            this.target,
+            controller.signal,
+            currentState.state === 'absent' ? 'initial' : 'deployed',
+          );
           return {
             base: observed.base,
-            currentState: currentCloudStateSchema.parse(observed.currentState),
+            currentState,
             contents: observed.contents,
           };
         })(),

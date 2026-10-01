@@ -18,10 +18,15 @@ digest. A changed GitOps base or live target invalidates approval.
 
 After the approved draft PR passes the trusted GitOps check and a human merges
 it, an authorized Argo operator syncs the app revision **with pruning**. The
-observer must see the merged PR, exact current GitOps files, Argo Synced and
-Healthy at matching files, no Ingress in the dedicated namespace, and no
-`rizz-staging-demo` ALB or target group tagged for this Ingress. Incomplete
-AWS/Kubernetes inventories are unavailable, not proof of cleanup.
+fixed-response bootstrap Ingress still keeps the ALB alive. A platform
+operator must separately review and apply an `argo-bootstrap` Terraform plan
+setting `enable_alb_bootstrap=false` while the Load Balancer Controller is
+running. The observer must then see the merged PR, exact current GitOps files,
+Argo Synced and Healthy at matching files, no Ingress in the dedicated
+namespace, and no `rizz-staging-demo` ALB or target group tagged for this
+Ingress. Incomplete AWS/Kubernetes inventories are unavailable, not proof of
+cleanup. Normal application releases require no Terraform plan; this switch
+exists for destructive retirement.
 
 ## Stage 2: remove application resources
 

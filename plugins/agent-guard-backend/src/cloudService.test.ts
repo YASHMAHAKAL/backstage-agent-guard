@@ -988,6 +988,11 @@ describe('authenticated cloud service using ONLY synthetic backend/reader/CI fix
     expect(created.body.snapshot.envelope.intentSource).toBe(
       'authenticated_user_submitted',
     );
+    expect(s.verifyTarget).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(AbortSignal),
+      'initial',
+    );
     await request(s.server)
       .get(`${url}/${created.body.id}`)
       .set('Authorization', header('stranger'))

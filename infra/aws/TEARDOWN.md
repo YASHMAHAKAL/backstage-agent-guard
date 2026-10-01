@@ -1,6 +1,9 @@
 # Short-demo teardown — not executed or authorized
 
-No AWS resources were created by these local increments. User intent is to begin teardown within minutes of successful verification; deletion can take longer and charges continue until corresponding resources are removed.
+These source changes created no AWS resources. The registry and state bucket
+retained from the earlier demo remain separate. User intent is to begin
+teardown within minutes of successful verification; deletion can take longer
+and charges continue until corresponding resources are removed.
 
 ## Evidence and scope
 
@@ -10,14 +13,14 @@ Review exact delete/retain scope: staging network/EKS/controller ALB, runtime se
 
 ## Remove controller resources first
 
-Freeze new releases and coordinate cloud-only GitOps deletion so Argo cannot recreate workloads. Review/merge removal of the app Ingress/resources while Argo and controllers still operate. Application deletion needs a reviewed cascading policy; deleting without cascade can orphan resources. Never indiscriminately delete the platform parent Application.
+Freeze new releases and coordinate cloud-only GitOps deletion so Argo cannot recreate workloads. Review/merge removal of the app Ingress/resources and perform the documented Argo sync with pruning while Argo and controllers still operate. Application deletion needs a reviewed cascading policy; deleting without cascade can orphan resources. Never indiscriminately delete the platform parent Application. The Terraform-owned fixed-response bootstrap Ingress still keeps the ALB alive at this point; remove it through a separately reviewed `argo-bootstrap` plan setting `enable_alb_bootstrap=false` while the controller is running.
 
 Verify Ingress plus actual AWS ALB/listeners/target groups/controller-owned security groups are gone. Inspect controller logs/finalizers/ENIs on failures. Keep controller IAM alive until cleanup finishes; do not force-remove finalizers or randomly delete ENIs. Failed ALB cleanup blocks normal cluster teardown and does not stop its charges.
 
 Handle namespace/ExternalSecret cleanup; deleting Kubernetes Secret does not delete AWS secret. Record retention decisions without reading/exposing values.
 
 For installations owned by the new `infra/aws/argocd` Terraform root, remove
-Applications/controllers after their AWS cleanup, then destroy the Argo root
+Applications/controllers through `argo-bootstrap` after their AWS cleanup, then destroy the Argo root
 while EKS API access and the worker are still available. Destroy the staging
 foundation afterward. Removing EKS first leaves the Helm provider unable to
 uninstall its tracked release. Direct operator Helm and Terraform must not both

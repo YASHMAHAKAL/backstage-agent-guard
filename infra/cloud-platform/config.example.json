@@ -1,5 +1,0 @@
-{
-  "expectedAccountId": "000000000000",
-  "vpcId": "vpc-00000000000000000",
-  "gitopsRepoUrl": "https://github.com/example-owner/example-gitops.git"
-}

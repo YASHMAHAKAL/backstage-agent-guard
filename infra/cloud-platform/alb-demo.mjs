@@ -85,11 +85,13 @@ export function renderAlbIngress(config) {
       name: 'rizz-frontend',
       namespace: 'rizz-staging',
       annotations: {
+        'alb.ingress.kubernetes.io/group.name': 'rizz-staging-demo',
         'alb.ingress.kubernetes.io/load-balancer-name': 'rizz-staging-demo',
         'alb.ingress.kubernetes.io/scheme': 'internet-facing',
         'alb.ingress.kubernetes.io/ip-address-type': 'ipv4',
         'alb.ingress.kubernetes.io/target-type': 'ip',
         'alb.ingress.kubernetes.io/listen-ports': '[{"HTTPS":443}]',
+        'alb.ingress.kubernetes.io/ssl-redirect': '443',
         'alb.ingress.kubernetes.io/inbound-cidrs': config.operatorCidr,
         'alb.ingress.kubernetes.io/certificate-arn': config.certificateArn,
         'alb.ingress.kubernetes.io/ssl-policy':

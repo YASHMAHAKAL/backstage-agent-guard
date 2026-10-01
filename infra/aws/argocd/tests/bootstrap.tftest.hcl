@@ -31,6 +31,10 @@ run "private_pinned_installation" {
     error_message = "Argo must remain private with no anonymous access or default grants."
   }
   assert {
+    condition     = yamldecode(helm_release.argocd.values[0]).configs.cm["accounts.rizz-observer"] == "apiKey" && strcontains(yamldecode(helm_release.argocd.values[0]).configs.rbac["policy.csv"], "applications, get, rizz-app/rizz-ai-staging, allow") && yamldecode(helm_release.argocd.values[0]).applicationSet.replicas == 0 && !yamldecode(helm_release.argocd.values[0]).dex.enabled
+    error_message = "The restricted observer and idle optional components must remain unchanged."
+  }
+  assert {
     condition     = !helm_release.argocd.upgrade_install && !helm_release.argocd.take_ownership && !helm_release.argocd.force_update && !helm_release.argocd.replace
     error_message = "Do not adopt or forcibly replace an existing release."
   }
