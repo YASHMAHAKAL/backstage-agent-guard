@@ -22,7 +22,7 @@ The secret _values_ are privately stored in AWS Secrets Manager and never enter
 the GitOps PR or Terraform state. The first cloud path does not exist in the
 GitOps repository yet, so Argo can only deploy it after that first merge.
 The bootstrap Ingress creates an operator-IP-restricted HTTP 503 ALB so its
-DNS name is known before importing the demo HTTPS certificate; it does not
+DNS name is known before Terraform imports the demo HTTPS certificate; it does not
 serve Rizz.AI.
 
 ## Local verification
@@ -49,7 +49,8 @@ For an authorized future demo, apply and verify the EKS foundation first,
 then the Argo Helm root, then the Argo bootstrap root. The latter waits for
 the two platform controller Applications to be Synced and Healthy and creates
 the fixed-response ALB. Verify live Pod Identity, webhook and CRD readiness,
-then import the ALB-hostname certificate privately before an app release.
+then verify the Terraform-imported ALB-hostname certificate and public SSM
+metadata before an app release.
 The first Backstage release PR creates the app manifests. Its human merge
 triggers Argo reconciliation; check actual Pods, HTTPS, secret sync and image
 digests before claiming success.

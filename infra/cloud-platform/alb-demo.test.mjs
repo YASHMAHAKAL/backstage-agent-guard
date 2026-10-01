@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { createPrivateKey, X509Certificate } from 'node:crypto';
-import { readFileSync, rmSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 import {
   bootstrapHostname,
-  createDemoCertificate,
   owner,
   renderAlbIngress,
   validateAlbConfig,
@@ -124,39 +122,5 @@ test('ready stage requires a matching-region observed-hostname shape, not a gues
     assert.throws(() =>
       renderAlbIngress({ ...config, stage: 'ready', hostname: bad }),
     );
-    assert.throws(() => createDemoCertificate(bad, 'ready'));
-  }
-});
-
-test('creates temporary local-only, hostname-matched certificates with private file permissions', () => {
-  for (const [stage, name] of [
-    ['bootstrap', bootstrapHostname],
-    ['ready', hostname],
-  ]) {
-    const bundle = createDemoCertificate(name, stage);
-    try {
-      assert.equal(statSync(bundle.directory).mode & 0o777, 0o700);
-      assert.equal(statSync(bundle.privateKey).mode & 0o777, 0o600);
-      assert.equal(statSync(bundle.certificate).mode & 0o777, 0o600);
-      const cert = new X509Certificate(readFileSync(bundle.certificate));
-      assert.equal(cert.checkHost(name), name);
-      assert.equal(
-        cert.checkPrivateKey(createPrivateKey(readFileSync(bundle.privateKey))),
-        true,
-      );
-      assert.equal(cert.ca, false);
-      assert.equal(cert.verify(cert.publicKey), true);
-      assert.equal(
-        bundle.certificateSha256,
-        `sha256:${cert.fingerprint256.replaceAll(':', '').toLowerCase()}`,
-      );
-      assert.ok(Date.parse(bundle.expiresAt) > Date.now());
-      assert.ok(Date.parse(bundle.expiresAt) < Date.now() + 3 * 86400000);
-      assert.equal(JSON.stringify(bundle).includes('BEGIN'), false);
-    } finally {
-      // Remove only the exact unique directory created by this test helper.
-      assert.match(bundle.directory, /\/rizz-alb-tls-[A-Za-z0-9]+$/);
-      rmSync(bundle.directory, { recursive: true });
-    }
   }
 });

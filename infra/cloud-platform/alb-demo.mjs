@@ -1,10 +1,7 @@
-import { X509Certificate } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { isIPv4 } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const yaml = createRequire(import.meta.url)('yaml');
@@ -128,73 +125,6 @@ export function renderAlbIngress(config) {
   };
 }
 
-/** Local only; fresh private temporary directory, never uploads to ACM. */
-export function createDemoCertificate(hostname, stage) {
-  validateHostname(hostname, stage);
-  const directory = mkdtempSync(join(tmpdir(), 'rizz-alb-tls-'));
-  chmodSync(directory, 0o700);
-  const certificate = join(directory, 'certificate.pem');
-  const privateKey = join(directory, 'private-key.pem');
-  const previousMask = process.umask(0o077);
-  try {
-    execFileSync(
-      'openssl',
-      [
-        'req',
-        '-x509',
-        '-newkey',
-        'rsa:2048',
-        '-sha256',
-        '-nodes',
-        '-days',
-        '2',
-        '-keyout',
-        privateKey,
-        '-out',
-        certificate,
-        // CN <=64 bytes even if AWS's hostname is longer; SAN is authoritative.
-        '-subj',
-        '/CN=Rizz.AI temporary demo',
-        '-addext',
-        `subjectAltName=DNS:${hostname}`,
-        '-addext',
-        'basicConstraints=critical,CA:FALSE',
-        '-addext',
-        'keyUsage=critical,digitalSignature,keyEncipherment',
-        '-addext',
-        'extendedKeyUsage=serverAuth',
-      ],
-      { stdio: 'ignore', timeout: 10000 },
-    );
-    chmodSync(privateKey, 0o600);
-    chmodSync(certificate, 0o600);
-    const parsed = new X509Certificate(readFileSync(certificate));
-    if (
-      parsed.checkHost(hostname) !== hostname ||
-      !parsed.verify(parsed.publicKey)
-    )
-      throw new Error('Certificate verification failed.');
-    return {
-      mode: 'local-certificate-only',
-      stage,
-      hostname,
-      directory,
-      certificate,
-      privateKey,
-      certificateSha256: `sha256:${parsed.fingerprint256
-        .replaceAll(':', '')
-        .toLowerCase()}`,
-      expiresAt: new Date(parsed.validTo).toISOString(),
-    };
-  } catch {
-    // Only this helper's fresh unique directory; no caller-supplied target.
-    rmSync(directory, { recursive: true, force: true });
-    throw new Error('Local certificate generation failed.');
-  } finally {
-    process.umask(previousMask);
-  }
-}
-
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -212,21 +142,10 @@ if (
           renderAlbIngress(JSON.parse(readFileSync(argument, 'utf8'))),
         ),
       );
-    } else if (
-      command === 'certificate' &&
-      argument &&
-      hostname &&
-      process.argv.length === 5
-    ) {
-      console.log(
-        JSON.stringify(createDemoCertificate(hostname, argument), null, 2),
-      );
     } else throw new Error('Invalid command.');
   } catch {
     // Do not emit arbitrary input values, key contents or OpenSSL stderr.
-    console.error(
-      'Offline ALB preparation failed. Usage: render CONFIG.json | certificate bootstrap|ready HOSTNAME',
-    );
+    console.error('Offline ALB preparation failed. Usage: render CONFIG.json');
     process.exitCode = 1;
   }
 }

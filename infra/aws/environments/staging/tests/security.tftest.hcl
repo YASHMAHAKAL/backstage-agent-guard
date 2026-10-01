@@ -136,15 +136,15 @@ run "cloud_reader_boundaries" {
     error_message = "Map the observer to its RBAC group in the exact staging cluster."
   }
   assert {
-    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement : statement.Action])) == toset(["eks:DescribeCluster", "acm:DescribeCertificate", "acm:GetCertificate", "ec2:DescribeSecurityGroups", "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeRules", "elasticloadbalancing:DescribeListenerCertificates", "elasticloadbalancing:DescribeTags", "ecr:BatchGetImage"])
+    condition     = toset(flatten([for statement in jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement : statement.Action])) == toset(["eks:DescribeCluster", "acm:DescribeCertificate", "acm:GetCertificate", "ssm:GetParameter", "ec2:DescribeSecurityGroups", "elasticloadbalancing:DescribeLoadBalancers", "elasticloadbalancing:DescribeTargetGroups", "elasticloadbalancing:DescribeListeners", "elasticloadbalancing:DescribeRules", "elasticloadbalancing:DescribeListenerCertificates", "elasticloadbalancing:DescribeTags", "ecr:BatchGetImage"])
     error_message = "The observer must have only the exact implemented metadata/manifest reads, never IAM, secret-value, deploy or mutation permissions."
   }
   assert {
-    condition     = jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[0].Resource == [aws_eks_cluster.staging.arn] && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Project"] == "rizz-platform" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Environment"] == "staging" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[2].Condition.StringEquals["aws:RequestedRegion"] == "us-east-1"
+    condition     = jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[0].Resource == [aws_eks_cluster.staging.arn] && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Project"] == "rizz-platform" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[1].Condition.StringEquals["aws:ResourceTag/Environment"] == "staging" && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[2].Resource == ["arn:aws:ssm:us-east-1:000000000000:parameter/rizz/staging/https-target"] && jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[3].Condition.StringEquals["aws:RequestedRegion"] == "us-east-1"
     error_message = "Bind cluster reads, tagged staging certificate reads and regional metadata reads."
   }
   assert {
-    condition     = toset(jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[3].Resource) == toset(["arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-frontend", "arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-backend"])
+    condition     = toset(jsondecode(aws_iam_role_policy.cloud_reader[0].policy).Statement[4].Resource) == toset(["arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-frontend", "arn:aws:ecr:us-east-1:000000000000:repository/rizz-staging-backend"])
     error_message = "ECR manifest access must cover only the reviewed image pair."
   }
 }

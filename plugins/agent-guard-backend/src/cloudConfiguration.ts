@@ -1,6 +1,6 @@
 import { Config } from '@backstage/config';
 import { AuthenticatedCloudReaders } from './cloudReaders';
-import { cloudTargetSchema } from './cloudTarget';
+import { cloudTargetMetadataSchema } from './cloudTarget';
 import { ReleaseCatalog } from './releases';
 import { CloudServiceConfiguration } from './services/CloudProposalService';
 import { CloudDeliveryObserver } from './cloudDelivery';
@@ -20,7 +20,7 @@ export function createCloudConfiguration(
       'Cloud governance requires the authenticated release source',
     );
   const c = config.getConfig('agentGuard.rizzCloud');
-  const target = cloudTargetSchema.parse(c.get('target'));
+  const target = cloudTargetMetadataSchema.parse(c.get('target'));
   const source = config.getConfig('agentGuard.rizzReleases');
   if (
     source.getString('repository') !== target.sourceRepository ||
@@ -34,6 +34,7 @@ export function createCloudConfiguration(
   const readers = new AuthenticatedCloudReaders({
     awsProfile: c.getString('awsProfile'),
     githubToken: c.getString('githubToken'),
+    requireMetadata: true,
   });
   const delivery = c.getOptionalBoolean('delivery.enabled')
     ? new CloudDeliveryObserver({

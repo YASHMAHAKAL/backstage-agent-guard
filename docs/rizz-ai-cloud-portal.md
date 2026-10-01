@@ -113,8 +113,9 @@ or live cloud success is claimed.
    state/ownership, cluster, Argo project/application and private repository access
    have been verified. No release template runs Terraform.
 2. The restricted-IP ALB and ready-stage self-signed certificate bootstrap have
-   completed. See `rizz-ai-alb-demo.md`. Target fields must come from observed
-   outputs, not this example. Changing the hostname/certificate or unsupported
+   completed. See `rizz-ai-alb-demo.md`. Backstage resolves the observed
+   hostname and certificate from Terraform's SSM metadata and live ACM reads.
+   Changing the hostname/certificate or unsupported
    existing app configuration needs a separate reviewed migration.
 3. Real trusted CI has published a retained paired release, with successful
    checks and both immutable ECR images. No fixture or mutable-tag fallback.
@@ -142,8 +143,9 @@ The committed examples are documentation, not ready-to-run account settings:
 - `app-config.rizz-releases.yaml.example`: real source repository/paired registry
   paths, release-reader profile and `${RIZZ_RELEASE_GITHUB_TOKEN}`.
 - `app-config.rizz-cloud.yaml.example`: disabled by default. Set actual account,
-  source/GitOps repositories, observed ALB hostname/operator `/32`, ready ACM ARN
-  and fingerprint, explicit submitter groups and dedicated cloud-reader profile.
+  source/GitOps repositories, operator `/32`, explicit submitter groups and
+  dedicated cloud-reader profile. The backend reads the hostname and ACM ARN
+  from `/rizz/staging/https-target` and computes the certificate fingerprint.
   `${RIZZ_GITOPS_READ_TOKEN}` is a read-only backend token.
 
 Create `app-config.rizz-cloud.local.yaml` only when preparing that explicit

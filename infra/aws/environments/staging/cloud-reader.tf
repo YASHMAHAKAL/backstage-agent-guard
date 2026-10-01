@@ -28,6 +28,10 @@ resource "aws_iam_role_policy" "cloud_reader" {
       Condition = { StringEquals = { "aws:ResourceTag/Project" = "rizz-platform", "aws:ResourceTag/Environment" = "staging" } }
     },
     {
+      Effect   = "Allow", Action = ["ssm:GetParameter"],
+      Resource = ["arn:aws:ssm:us-east-1:${var.expected_account_id}:parameter/rizz/staging/https-target"]
+    },
+    {
       # These describe APIs require wildcard resource access. Regional metadata
       # reads are broader than the app; there is no mutation authority.
       Effect = "Allow", Resource = ["*"],

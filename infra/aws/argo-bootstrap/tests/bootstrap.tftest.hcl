@@ -71,14 +71,28 @@ run "bootstrap_ownership_and_delivery" {
     condition     = kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/group.name"] == "rizz-staging-demo" && kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/inbound-cidrs"] == "203.0.113.10/32" && kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/listen-ports"] == "[{\"HTTP\":80}]"
     error_message = "ALB bootstrap must be a fixed, operator-only HTTP listener in the reviewed group."
   }
+  assert {
+    condition = (
+      length(tls_self_signed_cert.demo) == 1 &&
+      length(aws_acm_certificate.demo) == 1 &&
+      length(aws_ssm_parameter.demo_https_target) == 1 &&
+      aws_ssm_parameter.demo_https_target[0].name == "/rizz/staging/https-target" &&
+      aws_ssm_parameter.demo_https_target[0].type == "String" &&
+      aws_ssm_parameter.demo_https_target[0].tier == "Standard" &&
+      tls_self_signed_cert.demo[0].validity_period_hours == 48 &&
+      tls_self_signed_cert.demo[0].is_ca_certificate == false &&
+      aws_acm_certificate.demo[0].private_key_wo_version == 1
+    )
+    error_message = "The temporary certificate and metadata handoff must remain pinned to the bootstrap switch and write-only key."
+  }
 }
 
 run "retirement_disables_only_bootstrap_ingress" {
   command = plan
   variables { enable_alb_bootstrap = false }
   assert {
-    condition     = length(kubernetes_ingress_v1.alb_bootstrap) == 0 && kubernetes_manifest.rizz_app.manifest.spec.source.path == "clusters/eks-staging/apps/rizz-ai"
-    error_message = "The retirement switch must remove only the fixed-response Ingress, retaining the Argo Application."
+    condition     = length(kubernetes_ingress_v1.alb_bootstrap) == 0 && length(tls_self_signed_cert.demo) == 0 && length(aws_acm_certificate.demo) == 0 && length(aws_ssm_parameter.demo_https_target) == 0 && kubernetes_manifest.rizz_app.manifest.spec.source.path == "clusters/eks-staging/apps/rizz-ai"
+    error_message = "The retirement switch must remove the Ingress, certificate and metadata while retaining the Argo Application."
   }
 }
 

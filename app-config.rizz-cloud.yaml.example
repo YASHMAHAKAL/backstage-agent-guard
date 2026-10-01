@@ -1,6 +1,6 @@
 # Private local copy only; NOT part of default startup. No resources are created
 # by loading config. Set enabled true only after the reviewed foundation, ready
-# ALB certificate bootstrap, real release CI and mapped reviewers exist.
+# Terraform-published HTTPS metadata, real release CI and mapped reviewers exist.
 # Also load the filled rizz-releases overlay and GitHub auth configuration.
 agentGuard:
   rizzCloud:
@@ -34,11 +34,10 @@ agentGuard:
       gitopsPath: clusters/eks-staging/apps/rizz-ai
       argoApplication: rizz-ai-staging
       ingress:
-        stage: ready
-        hostname: rizz-staging-demo-1234567890.us-east-1.elb.amazonaws.com
+        # Terraform publishes the ALB hostname and ACM ARN at the fixed
+        # /rizz/staging/https-target SSM parameter. The backend computes and
+        # verifies the certificate fingerprint directly from ACM.
         operatorCidr: 203.0.113.10/32
-        certificateArn: arn:aws:acm:us-east-1:000000000000:certificate/00000000-0000-0000-0000-000000000000
-        certificateSha256: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 catalog:
   # Catalog location arrays replace earlier overlays. Keep Kind, org and the
   # Rizz.AI source/resource entries when this example is loaded last.
