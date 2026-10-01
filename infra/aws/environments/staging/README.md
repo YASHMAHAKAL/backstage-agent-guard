@@ -48,7 +48,7 @@ demo status; the preparation statements below describe the original module work.
 | --- | --- |
 | Network/EKS/workers/access/IAM/secret metadata | Terraform, this root; never app release CI |
 | CNI, kube-proxy, Pod Identity Agent, CoreDNS | Terraform EKS managed add-ons; no competing Helm owner |
-| Argo CD | Separate pinned platform-operator bootstrap release; same owner maintains upgrades, no self-management or Terraform Helm overlap in this milestone |
+| Argo CD | Separate [Terraform Helm bootstrap root](../../argocd/README.md); owns installation/upgrades after EKS readiness, no Argo self-management |
 | Load Balancer Controller / External Secrets Operator | Restricted Argo platform Application, cloud GitOps path |
 | SecretStore/ExternalSecret/Rizz workloads | Restricted app/platform Applications with explicit cloud destinations |
 | Secret values | Authorized operator in Secrets Manager; never Terraform/Git/Jev |

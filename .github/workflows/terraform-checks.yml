@@ -26,6 +26,7 @@ jobs:
           - infra/aws/bootstrap
           - infra/aws/registry
           - infra/aws/environments/staging
+          - infra/aws/argocd
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -36,6 +37,9 @@ jobs:
           terraform_wrapper: false
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive infra/aws
+      - name: Fetch checksum-verified Argo chart for mocked tests
+        if: matrix.root == 'infra/aws/argocd'
+        run: node infra/cloud-platform/fetch-argocd-chart.mjs
       - name: Initialize without remote state
         working-directory: ${{ matrix.root }}
         run: terraform init -backend=false -input=false -lockfile=readonly

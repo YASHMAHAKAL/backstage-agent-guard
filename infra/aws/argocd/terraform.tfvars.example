@@ -1,0 +1,4 @@
+aws_profile         = "rizz-platform"
+expected_account_id = "000000000000"
+# Normally omitted: the verified archive is cached under .terraform/charts.
+# argocd_chart_archive = "/absolute/path/to/argo-cd-10.9.2.tgz"

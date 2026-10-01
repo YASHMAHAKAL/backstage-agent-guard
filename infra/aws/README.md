@@ -1,14 +1,15 @@
-# Reviewed AWS foundation — local Phase 3 preparation
+# AWS foundation and Argo bootstrap
 
-Code is prepared locally; nothing in this directory has been applied to AWS. Region is `us-east-1`; identity is the separately configured non-root `rizz-platform` profile. Never fall back to the default/root profile. State/ECR/OIDC and EKS/network code are prepared; Argo/controller installation and cloud app deployment remain unfinished.
+Region is `us-east-1`; identity is the separately configured non-root `rizz-platform` profile. Never fall back to the default/root profile. Separate roots manage state/ECR/OIDC, EKS/network and Argo installation. This document describes configuration and operation requirements; operator execution records establish actual resource status. Argo installation is automated through its Helm root; controller bootstrap and cloud app deployment still require the following separate steps.
 
 ## Separate state/ownership roots
 
-| Root                   | Owns                                                                                                  | State and retention                                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `bootstrap`            | Versioned/encrypted/private TLS-only S3 state bucket                                                  | Initially local state; securely back up off-repo. Bucket has prevent-destroy and no force-delete.      |
-| `registry`             | Two immutable ECR repos, publisher IAM role, optional new GitHub OIDC provider, monthly budget alerts | S3 backend, encryption and native lockfile enabled; state key isolated from future EKS root.           |
-| `environments/staging` | VPC/EKS/access/managed add-ons/secret metadata                                                        | Separate S3 key; [configuration and remaining gates](environments/staging/README.md). Not provisioned. |
+| Root                   | Owns                                                                                                  | State and retention                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `bootstrap`            | Versioned/encrypted/private TLS-only S3 state bucket                                                  | Initially local state; securely back up off-repo. Bucket has prevent-destroy and no force-delete.   |
+| `registry`             | Two immutable ECR repos, publisher IAM role, optional new GitHub OIDC provider, monthly budget alerts | S3 backend, encryption and native lockfile enabled; state key isolated from future EKS root.        |
+| `environments/staging` | VPC/EKS/access/managed add-ons/secret metadata                                                        | Separate S3 key; [configuration and remaining gates](environments/staging/README.md).               |
+| `argocd`               | Pinned private Argo CD Helm release after EKS readiness                                               | Separate S3 key; [bootstrap and teardown ordering](argocd/README.md). Local code only, not applied. |
 
 Do not run the old Rizz.AI Terraform root or import/duplicate existing resources blindly. Local source CI no longer applies it; remote workflow replacement is still unpublished. These new names are deliberately `rizz-staging-*`, not the legacy `rizz-app`/`rizz-backend`/`rizz-cluster` names. Preflight must still reconcile any existing Rizz deployment and Terraform state before a fresh foundation is authorized. The bounded script now checks new/legacy ECR and EKS names and project VPC Name tags, in addition to registry/bootstrap metadata; it is not a full cloud inventory. Passing it does not prove state ownership or the absence of untagged/renamed resources. See the [current cost and preflight checklist](../../docs/rizz-ai-cloud-preflight.md).
 
@@ -24,6 +25,10 @@ terraform -chdir=infra/aws/registry test
 terraform -chdir=infra/aws/environments/staging init -backend=false -input=false
 terraform -chdir=infra/aws/environments/staging validate
 terraform -chdir=infra/aws/environments/staging test
+node infra/cloud-platform/fetch-argocd-chart.mjs
+terraform -chdir=infra/aws/argocd init -backend=false -input=false
+terraform -chdir=infra/aws/argocd validate
+terraform -chdir=infra/aws/argocd test
 node infra/aws/scripts/preflight.test.mjs
 ```
 
@@ -40,7 +45,7 @@ Tests use mocked providers and plan operations, not real AWS plans or applies. P
 7. After bucket verification, copy the registry backend example to ignored `state.backend.hcl`, fill the verified bucket/profile/account, and initialize the registry backend with that file. Do not use `-migrate-state`, import or overwrite existing state without a reviewed reconciliation step.
 8. Generate/review the registry saved plan. Obtain distinct authorization to apply it. Verify native remote locking/version recovery and actual IAM trust after provisioning. No actual lock or recovery test has happened yet.
 
-This README intentionally does not give an automatic apply command. Editing code or passing mock tests does not grant provisioning authority. Argo/controller configuration is [prepared separately](../cloud-platform/README.md); it has not been installed, published or deployed.
+This README intentionally does not give an automatic apply command. Editing code or passing mock tests does not grant provisioning authority. Argo installation now has its own [Terraform bootstrap root](argocd/README.md). Apply the verified foundation before Argo bootstrap; controller/Application configuration remains [prepared separately](../cloud-platform/README.md).
 
 ## CI publishing boundary
 
