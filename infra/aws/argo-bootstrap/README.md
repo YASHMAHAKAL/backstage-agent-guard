@@ -3,7 +3,8 @@
 This root owns the two bootstrap namespaces, the closed Argo `default` project,
 the `rizz-platform` and `rizz-app` projects, three Applications, the private
 read-only GitOps repository connection, a fixed-response ALB bootstrap
-Ingress, a temporary imported ACM certificate and a public-metadata SSM
+Ingress, the namespace-scoped Backstage cloud observer Role/RoleBinding,
+a temporary imported ACM certificate and a public-metadata SSM
 parameter. It does not install Argo CD itself or apply Rizz.AI workload
 manifests. The Argo Helm root must be applied first so
 its `Application` and `AppProject` CRDs exist **before this root is planned**.
@@ -36,6 +37,11 @@ absent until the first approved Backstage PR is merged, so Argo will report a
 source error before that merge. This does not make the Terraform apply a
 successful app deployment. The first PR creates the nine application files,
 including SecretStore and ExternalSecret; subsequent PR merges update them.
+
+The staging root maps the dedicated cloud-reader IAM role to the
+`rizz-cloud-observers` EKS group. This root binds that group to read-only
+namespace RBAC in `rizz-staging`. The Rizz.AI GitOps Application cannot manage
+RBAC, and no Kubernetes Secret read is granted.
 
 After the Load Balancer Controller becomes healthy, the Terraform-managed
 `rizz-alb-bootstrap` Ingress creates the ALB with an operator-IP-only HTTP

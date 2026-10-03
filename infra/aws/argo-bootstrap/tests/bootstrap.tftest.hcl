@@ -68,6 +68,18 @@ run "bootstrap_ownership_and_delivery" {
     error_message = "Argo repository credential must use the write-only field."
   }
   assert {
+    condition = (
+      kubernetes_role_v1.cloud_observer.metadata[0].namespace == "rizz-staging" &&
+      kubernetes_role_binding_v1.cloud_observer.role_ref[0].name == kubernetes_role_v1.cloud_observer.metadata[0].name &&
+      kubernetes_role_binding_v1.cloud_observer.subject[0].name == "rizz-cloud-observers" &&
+      alltrue([for rule in kubernetes_role_v1.cloud_observer.rule :
+        alltrue([for verb in rule.verbs : contains(["get", "list"], verb)]) &&
+        alltrue([for resource in rule.resources : !contains(["secrets", "nodes", "*"], resource)])
+      ])
+    )
+    error_message = "The cloud observer must have only namespace-scoped read access through its dedicated EKS group."
+  }
+  assert {
     condition     = kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/group.name"] == "rizz-staging-demo" && kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/inbound-cidrs"] == "203.0.113.10/32" && kubernetes_ingress_v1.alb_bootstrap[0].metadata[0].annotations["alb.ingress.kubernetes.io/listen-ports"] == "[{\"HTTP\":80}]"
     error_message = "ALB bootstrap must be a fixed, operator-only HTTP listener in the reviewed group."
   }

@@ -59,8 +59,8 @@ resource "aws_eks_access_entry" "cloud_reader" {
   principal_arn     = aws_iam_role.cloud_reader[0].arn
   type              = "STANDARD"
   kubernetes_groups = ["rizz-cloud-observers"]
-  # No EKS access-policy association. Namespace-only operator-installed RBAC
-  # supplies Kubernetes permissions; the role cannot read Kubernetes Secrets.
+  # No EKS access-policy association. Namespace-only RBAC in the separate
+  # Argo bootstrap root supplies Kubernetes permissions, never Secret reads.
 }
 
 output "cloud_reader_role_arn" {

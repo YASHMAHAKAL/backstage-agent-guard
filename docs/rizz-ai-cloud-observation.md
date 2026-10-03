@@ -100,10 +100,11 @@ target verification permissions in `rizz-ai-cloud-phase-4.md`, and
 same explicit profile. Configured live observation now makes these read-only
 AWS calls; implementation tests use fixtures, with no AWS or Gemini calls.
 
-## Namespace-scoped Kubernetes authorization (not installed)
+## Namespace-scoped Kubernetes authorization
 
-Prepared `infra/cloud-platform/observer/rbac.yaml` is an operator bootstrap
-artifact, outside the unprivileged app recipe. It permits exact-name GETs for
+The Argo bootstrap Terraform root owns the cloud observer Role and RoleBinding
+in `rizz-staging`, outside the unprivileged app recipe. Its reviewed saved plan
+must be applied after EKS and Argo exist. It permits exact-name GETs for
 Deployments, Services, ConfigMap, Ingress and secret-sync objects, plus namespace
 list access to those resource kinds, Pods and ReplicaSets for retirement
 inventory. It grants no Secrets, node reads, logs, exec or write verbs. RBAC
@@ -121,13 +122,12 @@ process restart and cannot be summed across replicas from this endpoint. A
 failed read shows unavailable rather than zero. The public nginx frontend
 returns 404 for `/metrics`.
 
-Before a real demo, an explicitly reviewed EKS STANDARD access entry must map
-the actual reader IAM role/user ARN to `rizz-cloud-observers`. The operator then
-installs the Role/RoleBinding in the verified EKS namespace. Do not associate
-cluster-admin policies, use root or reuse the bootstrap admin profile. This
-file creates no AWS access entry or identity and invents no membership. Keep
-Kind access separate. The backend needs network access from the allowed
-operator IP to the EKS API and ALB.
+The staging Terraform root creates the dedicated reader IAM role and EKS
+STANDARD access entry mapping it to `rizz-cloud-observers`. The Argo bootstrap
+root then creates the Role/RoleBinding. Do not associate cluster-admin policies,
+use root or reuse the bootstrap admin profile. Neither root grants app GitOps
+permission to edit RBAC. Keep Kind access separate. The backend needs network
+access from the allowed operator IP to the EKS API and ALB.
 
 ## Still pending: live acceptance, not verification code
 
