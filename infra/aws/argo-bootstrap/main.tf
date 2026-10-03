@@ -73,6 +73,9 @@ import {
 }
 
 resource "kubernetes_manifest" "default_project" {
+  # Argo creates and owns the initial wildcard fields. Take ownership only
+  # when replacing them with this closed project during the reviewed import.
+  field_manager { force_conflicts = true }
   manifest = {
     apiVersion = "argoproj.io/v1alpha1"
     kind       = "AppProject"
@@ -173,7 +176,7 @@ resource "kubernetes_manifest" "platform_app" {
       }
       }, each.key == "aws-load-balancer-controller" ? {
       ignoreDifferences = concat(
-        [{ group = "", kind = "Secret", name = "aws-load-balancer-tls", namespace = "kube-system", jsonPointers = ["/data"] }],
+        [{ kind = "Secret", name = "aws-load-balancer-tls", namespace = "kube-system", jsonPointers = ["/data"] }],
         [for kind in ["MutatingWebhookConfiguration", "ValidatingWebhookConfiguration"] : {
           group = "admissionregistration.k8s.io", kind = kind, name = "aws-load-balancer-webhook", jqPathExpressions = [".webhooks[].clientConfig.caBundle"]
         }],
