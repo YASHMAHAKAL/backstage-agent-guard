@@ -9,7 +9,6 @@ import {
   WorkloadObservation,
   SmokeObservation,
 } from './cloudRuntime';
-import { readCloudHttpsJson } from './cloudHttps';
 
 type Stage = {
   state: string;
@@ -48,38 +47,20 @@ const sha = z.string().regex(/^[a-f0-9]{40}$/);
 
 // Authenticated, bounded GETs only. No Argo refresh/sync or GitHub mutation.
 export class CloudDeliveryObserver implements CloudDeliveryReader {
-  private readonly url: URL;
-  private readonly ca?: Buffer;
   constructor(
     private readonly options: {
       readers: Pick<
         AuthenticatedCloudReaders,
-        'readPullRequest' | 'isAncestor' | 'readGitopsRevision'
+        | 'readPullRequest'
+        | 'isAncestor'
+        | 'readGitopsRevision'
+        | 'readArgoApplication'
       >;
-      argoCdUrl: string;
-      argoCdToken: string;
       destinationServer: string;
-      argoCdCaBase64?: string;
-      argoRead?: (application: string, signal: AbortSignal) => Promise<unknown>;
       timeoutMs?: number;
       runtime?: CloudRuntimeReader;
     },
   ) {
-    this.url = new URL(options.argoCdUrl);
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(
-      this.url.hostname,
-    );
-    if (
-      this.url.username ||
-      this.url.password ||
-      this.url.search ||
-      this.url.hash ||
-      this.url.pathname !== '/' ||
-      (this.url.protocol !== 'https:' &&
-        !(local && this.url.protocol === 'http:')) ||
-      !options.argoCdToken.trim()
-    )
-      throw new Error('Explicit private Argo reader configuration required');
     const destination = new URL(options.destinationServer);
     if (
       destination.protocol !== 'https:' ||
@@ -90,59 +71,6 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
       destination.pathname !== '/'
     )
       throw new Error('Invalid pinned Argo destination');
-    if (options.argoCdCaBase64) {
-      this.ca = Buffer.from(options.argoCdCaBase64, 'base64');
-      if (
-        this.ca.length > 32768 ||
-        !this.ca.toString().includes('-----BEGIN CERTIFICATE-----')
-      )
-        throw new Error('Invalid Argo CA');
-    }
-  }
-
-  private async argo(
-    application: string,
-    signal: AbortSignal,
-  ): Promise<unknown> {
-    if (this.options.argoRead)
-      return this.options.argoRead(application, signal);
-    const url = new URL(
-      `/api/v1/applications/${encodeURIComponent(
-        application,
-      )}?project=rizz-app`,
-      this.url,
-    );
-    const headers = {
-      Authorization: `Bearer ${this.options.argoCdToken}`,
-      Accept: 'application/json',
-    };
-    if (url.protocol === 'https:') {
-      return readCloudHttpsJson({
-        url,
-        signal,
-        ca: this.ca?.toString('utf8'),
-        token: this.options.argoCdToken,
-      });
-    }
-    // HTTP is restricted to an explicit loopback port-forward; never remote.
-    const response = await fetch(url, { headers, signal, redirect: 'error' });
-    if (!response.ok || !response.body) throw new Error('Argo unavailable');
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      for (;;) {
-        const item = await reader.read();
-        if (item.done) break;
-        size += item.value.length;
-        if (size > 2 * 1024 * 1024) throw new Error('Argo response too large');
-        chunks.push(item.value);
-      }
-    } finally {
-      await reader.cancel();
-      reader.releaseLock();
-    }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
 
   async observeApplication(target: CloudTarget, signal: AbortSignal) {
@@ -161,6 +89,8 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
       .strict();
     const app = z
       .object({
+        apiVersion: z.literal('argoproj.io/v1alpha1'),
+        kind: z.literal('Application'),
         metadata: z.object({
           name: z.literal(target.argoApplication),
           namespace: z.literal('argocd'),
@@ -181,7 +111,7 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
           conditions: z.array(z.unknown()).length(0).optional(),
         }),
       })
-      .parse(await this.argo(target.argoApplication, signal));
+      .parse(await this.options.readers.readArgoApplication(target, signal));
     return {
       revision: app.status.sync.revision,
       sync: app.status.sync.status,
@@ -321,6 +251,8 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
           .strict();
         const app = z
           .object({
+            apiVersion: z.literal('argoproj.io/v1alpha1'),
+            kind: z.literal('Application'),
             metadata: z.object({
               name: z.literal(target.argoApplication),
               namespace: z.literal('argocd'),
@@ -341,7 +273,12 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
               conditions: z.array(z.unknown()).length(0).optional(),
             }),
           })
-          .parse(await this.argo(target.argoApplication, controller.signal));
+          .parse(
+            await this.options.readers.readArgoApplication(
+              target,
+              controller.signal,
+            ),
+          );
         const revision = app.status.sync.revision;
         result.argoCd = {
           state: 'observed',
@@ -391,6 +328,8 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
         ) {
           const finalApp = z
             .object({
+              apiVersion: z.literal('argoproj.io/v1alpha1'),
+              kind: z.literal('Application'),
               metadata: z.object({
                 name: z.literal(target.argoApplication),
                 namespace: z.literal('argocd'),
@@ -412,7 +351,10 @@ export class CloudDeliveryObserver implements CloudDeliveryReader {
               }),
             })
             .safeParse(
-              await this.argo(target.argoApplication, controller.signal),
+              await this.options.readers.readArgoApplication(
+                target,
+                controller.signal,
+              ),
             );
           if (!finalApp.success) {
             result.argoCd.state = 'changed_during_observation';

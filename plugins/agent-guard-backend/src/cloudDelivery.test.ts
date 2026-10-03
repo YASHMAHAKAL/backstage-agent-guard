@@ -54,6 +54,8 @@ function setup() {
     namespace: target.namespace,
   };
   const app = {
+    apiVersion: 'argoproj.io/v1alpha1',
+    kind: 'Application',
     metadata: { name: target.argoApplication, namespace: 'argocd' },
     spec: { project: 'rizz-app', source, destination },
     status: {
@@ -72,16 +74,13 @@ function setup() {
       base: { revision: ref, files },
       currentState: { state: 'present' },
     })),
+    readArgoApplication: jest.fn().mockImplementation(async () => app),
   };
-  const argoRead = jest.fn().mockImplementation(async () => app);
   const options = {
     readers,
-    argoRead,
-    argoCdUrl: 'https://localhost:8443',
-    argoCdToken: 'fixture-token-not-live',
     destinationServer: destination.server,
   };
-  return { proposal, pr, app, readers, argoRead, options, merged, revision };
+  return { proposal, pr, app, readers, options, merged, revision };
 }
 it('independently checks merged and actual synced bytes, but never claims verified deployment', async () => {
   const s = setup();
@@ -119,7 +118,7 @@ it('declares delivery verified only after all evidence and a final Argo recheck'
     runtime,
   }).observe(s.proposal);
   expect(result.deployed).toBe(true);
-  expect(s.argoRead).toHaveBeenCalledTimes(2);
+  expect(s.readers.readArgoApplication).toHaveBeenCalledTimes(2);
   expect(runtime.observe).toHaveBeenCalledWith(
     s.proposal.snapshot,
     expect.any(AbortSignal),
@@ -200,13 +199,15 @@ it.each(['workloads', 'smoke'])(
 );
 it('invalidates a successful runtime observation when Argo changes during verification', async () => {
   const s = setup();
-  s.argoRead.mockResolvedValueOnce(s.app).mockResolvedValueOnce({
-    ...s.app,
-    status: {
-      ...s.app.status,
-      sync: { ...s.app.status.sync, revision: 'e'.repeat(40) },
-    },
-  });
+  s.readers.readArgoApplication
+    .mockResolvedValueOnce(s.app)
+    .mockResolvedValueOnce({
+      ...s.app,
+      status: {
+        ...s.app.status,
+        sync: { ...s.app.status.sync, revision: 'e'.repeat(40) },
+      },
+    });
   const result = await new CloudDeliveryObserver({
     ...s.options,
     runtime: { observe: jest.fn().mockResolvedValue(verifiedRuntime) },
@@ -262,7 +263,7 @@ it.each(['extraFile', 'duplicateFile', 'missingFile'])(
       s.proposal,
     );
     expect(result.github.state).toBe('approved_files_mismatch');
-    expect(s.argoRead).not.toHaveBeenCalled();
+    expect(s.readers.readArgoApplication).not.toHaveBeenCalled();
   },
 );
 it.each([
@@ -299,7 +300,7 @@ it.each(['wrongRepo', 'wrongBranch', 'wrongHead', 'badRevision'])(
       s.proposal,
     );
     expect(result.github.state).toBe('unavailable_or_invalid');
-    expect(s.argoRead).not.toHaveBeenCalled();
+    expect(s.readers.readArgoApplication).not.toHaveBeenCalled();
   },
 );
 it.each(['open', 'draft', 'closed_unmerged'])(
@@ -313,10 +314,13 @@ it.each(['open', 'draft', 'closed_unmerged'])(
       s.proposal,
     );
     expect(result.github.state).toBe(state);
-    expect(s.argoRead).not.toHaveBeenCalled();
+    expect(s.readers.readArgoApplication).not.toHaveBeenCalled();
   },
 );
 it.each([
+  'wrongKind',
+  'wrongApiVersion',
+  'wrongName',
   'wrongProject',
   'wrongNamespace',
   'wrongDestination',
@@ -327,6 +331,9 @@ it.each([
 ])('rejects Argo source/destination evidence: %s', async issue => {
   const s = setup();
   const app: any = structuredClone(s.app);
+  if (issue === 'wrongKind') app.kind = 'AppProject';
+  if (issue === 'wrongApiVersion') app.apiVersion = 'argoproj.io/v1beta1';
+  if (issue === 'wrongName') app.metadata.name = 'another-app';
   if (issue === 'wrongProject') app.spec.project = 'default';
   if (issue === 'wrongNamespace') app.spec.destination.namespace = 'staging';
   if (issue === 'wrongDestination')
@@ -338,7 +345,7 @@ it.each([
       'https://github.com/another/repo.git';
   if (issue === 'errorCondition')
     app.status.conditions = [{ type: 'ComparisonError' }];
-  s.argoRead.mockResolvedValue(app);
+  s.readers.readArgoApplication.mockResolvedValue(app);
   expect(
     (await new CloudDeliveryObserver(s.options).observe(s.proposal)).argoCd
       .state,
@@ -366,7 +373,9 @@ it('does not keep a green Argo result after a subsequent outage', async () => {
   expect((await observer.observe(s.proposal)).argoCd.state).toBe(
     'synced_files_match',
   );
-  s.argoRead.mockRejectedValue(new Error('private-secret-error'));
+  s.readers.readArgoApplication.mockRejectedValue(
+    new Error('private-secret-error'),
+  );
   const result = await observer.observe(s.proposal);
   expect(result.argoCd.state).toBe('unavailable_or_invalid');
   expect(JSON.stringify(result)).not.toContain('private-secret-error');
@@ -374,7 +383,7 @@ it('does not keep a green Argo result after a subsequent outage', async () => {
 it('bounds a reader that ignores cancellation and does not mutate a returned result later', async () => {
   const s = setup();
   let finish!: (value: unknown) => void;
-  s.argoRead.mockImplementation(
+  s.readers.readArgoApplication.mockImplementation(
     () =>
       new Promise(resolve => {
         finish = resolve;
@@ -392,11 +401,11 @@ it('bounds a reader that ignores cancellation and does not mutate a returned res
 });
 it.each([
   'http://remote.example',
-  'https://user:password@localhost:8443',
-  'https://localhost:8443/api',
-  'https://localhost:8443/?token=x',
-])('rejects unsafe operator endpoint %s', argoCdUrl => {
+  'https://user:password@kubernetes.default.svc',
+  'https://kubernetes.default.svc/api',
+  'https://kubernetes.default.svc/?token=x',
+])('rejects unsafe pinned Argo destination %s', destinationServer => {
   expect(
-    () => new CloudDeliveryObserver({ ...setup().options, argoCdUrl }),
+    () => new CloudDeliveryObserver({ ...setup().options, destinationServer }),
   ).toThrow();
 });

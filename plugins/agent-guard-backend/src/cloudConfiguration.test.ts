@@ -57,15 +57,13 @@ it('requires explicit separate cloud observation configuration and constructs it
   const data = configured();
   data.agentGuard.rizzCloud.delivery = {
     enabled: true,
-    argoCdUrl: 'https://localhost:8443',
-    argoCdToken: 'fixture-not-live',
     destinationServer: 'https://kubernetes.default.svc',
   };
   expect(
     createCloudConfiguration(new ConfigReader(data), new ReleaseCatalog())!
       .delivery,
   ).toBeDefined();
-  delete data.agentGuard.rizzCloud.delivery.argoCdToken;
+  delete data.agentGuard.rizzCloud.delivery.destinationServer;
   expect(() =>
     createCloudConfiguration(new ConfigReader(data), new ReleaseCatalog()),
   ).toThrow();

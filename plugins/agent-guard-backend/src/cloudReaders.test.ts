@@ -197,6 +197,39 @@ function awsFixture() {
     }),
   };
 }
+it('reads only the pinned Argo Application CR through the EKS connection', async () => {
+  const connection = {
+    endpoint: 'https://cluster.us-east-1.eks.amazonaws.com',
+    ca: 'fixture-ca',
+    token: 'synthetic-authentication',
+  };
+  const kubernetesRead = jest.fn().mockResolvedValue({
+    metadata: { name: 'rizz-ai-staging', namespace: 'argocd' },
+  });
+  const reader = new AuthenticatedCloudReaders({
+    awsProfile: 'fixture-reader',
+    githubToken: 'not-live',
+    kubernetesRead,
+  });
+  const cluster = jest
+    .spyOn(reader, 'readClusterConnection')
+    .mockResolvedValue(connection);
+  const abort = signal();
+  await reader.readArgoApplication(target, abort);
+  expect(cluster).toHaveBeenCalledWith(target, abort);
+  expect(kubernetesRead).toHaveBeenCalledWith(
+    connection,
+    '/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/rizz-ai-staging',
+    abort,
+  );
+  await expect(
+    reader.readArgoApplication(
+      { ...target, argoApplication: 'another-app' } as unknown as CloudTarget,
+      abort,
+    ),
+  ).rejects.toThrow();
+  expect(kubernetesRead).toHaveBeenCalledTimes(1);
+});
 it('verifies actual X509 bytes against synthetic AWS target evidence, using read operations only', async () => {
   const h = awsFixture();
   await expect(

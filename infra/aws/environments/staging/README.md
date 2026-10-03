@@ -24,10 +24,10 @@ Kind configuration is separate.
 create `rizz-staging-cloud-reader`, its inline read policy and a STANDARD EKS
 access entry mapping it to `rizz-cloud-observers`. Trust names only the existing
 reviewed operator principal, with one-hour sessions. No EKS access policy is
-associated. Install the reviewed namespace
-[`observer/rbac.yaml`](../../../cloud-platform/observer/rbac.yaml) separately
-before using the `rizz-cloud-reader` role profile. It grants no Kubernetes Secret
-reads or writes. Do not substitute the bootstrap administrator profile.
+associated. The later Argo bootstrap Terraform root installs the restricted
+namespace Role and RoleBinding before using the `rizz-cloud-reader` role profile.
+It grants no Kubernetes Secret reads or writes. Do not substitute the bootstrap
+administrator profile.
 
 The EKS group mapping follows [AWS's RBAC access-entry guidance](https://docs.aws.amazon.com/eks/latest/userguide/access-policies.html).
 Certificate tag conditions are supported by [ACM's authorization reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_acm.html).

@@ -24,8 +24,9 @@ Kubernetes providers while the cluster is still being created.
 - Installs `argocd` in its namespace with the existing private ClusterIP service,
   anonymous access disabled, empty default RBAC grants, and bounded resources.
 - Gets fresh EKS authentication through `aws eks get-token`; it does not use or
-  overwrite the default/Kind kubeconfig. No token or application API key is an
-  input or output.
+  overwrite the default/Kind kubeconfig. No Argo API observer account or
+  application API key is an input or output; Backstage reads the named
+  Application CR through its separate EKS reader Role after bootstrap.
 - Waits for workloads and jobs, with a ten-minute timeout. Installation failure
   remains visible for diagnosis. It never forcibly adopts an existing release.
 

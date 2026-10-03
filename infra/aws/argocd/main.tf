@@ -45,14 +45,9 @@ resource "helm_release" "argocd" {
       cm = {
         "admin.enabled"           = true
         "users.anonymous.enabled" = false
-        "accounts.rizz-observer"  = "apiKey"
       }
       rbac = {
         "policy.default" = ""
-        "policy.csv" = join("\n", [
-          "p, role:rizz-observer, applications, get, rizz-app/rizz-ai-staging, allow",
-          "g, rizz-observer, role:rizz-observer",
-        ])
       }
     }
     controller = {

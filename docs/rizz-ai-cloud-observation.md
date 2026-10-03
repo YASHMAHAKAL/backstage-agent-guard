@@ -23,7 +23,7 @@ The observation independently checks:
   base. Open/draft/closed-without-merge remains distinct from a merged PR.
 - All nine app files/hashes at the immutable merge commit, using Git tree/blob
   integrity checks, not unpinned branch contents.
-- The dedicated Argo app/project, repository, main branch, path, namespace and
+- The dedicated Argo Application CR/project, repository, main branch, path, namespace and
   operator-pinned destination server, including its compared-to source/destination.
   Multi-source/custom source options, wrong destinations and comparison errors
   fail closed. There is no status request with `refresh` or sync side effect.
@@ -68,29 +68,31 @@ release checks. No retained old green result is reused after an outage. Each
 response has `checkedAt`; there is no cache or continuous-monitoring claim.
 Reads are bounded by a 45-second deadline and 2 MiB provider responses (4 KiB
 smoke bodies); HTTPS also has an 8-second idle timeout. Errors
-are sanitized. GitHub credentials never follow redirects. Argo HTTPS uses TLS
-hostname/CA verification; a self-signed Argo endpoint needs its actual CA.
-Only an explicit loopback port-forward may use HTTP; do not use remote HTTP or
-disable TLS verification. Argo redirects/non-200/malformed responses fail closed.
+are sanitized. GitHub credentials never follow redirects. The Argo Application
+is read by exact name through the EKS Kubernetes API using its verified endpoint,
+CA and short-lived EKS credential. Failed or malformed reads fail closed. No
+Argo API token, Argo CA or port-forward is needed for this cloud observation.
 
-## Configuration prerequisites (operator step, not performed)
+## Configuration prerequisites
 
-In the ignored, filled cloud overlay, set `agentGuard.rizzCloud.delivery.enabled`
-to true only after the dedicated EKS Argo is available. Supply:
+The ignored, filled cloud overlay enables `agentGuard.rizzCloud.delivery` and
+supplies the pinned destination below. Constructing the observer makes no
+provider call at startup; an observation reports unavailable until EKS, Argo,
+its Application and the observer RBAC are available. The committed example
+overlay remains disabled by default.
 
-- `argoCdUrl`: the dedicated cloud endpoint/port-forward, not Kind's endpoint.
-- `argoCdToken`: a short-lived backend-only token for `rizz-observer`.
-- `argoCdCaBase64`: actual Argo TLS certificate CA for its endpoint.
 - `destinationServer`: exactly the generated cloud Application destination;
   dedicated in-cluster Argo currently uses `https://kubernetes.default.svc`.
 
-The prepared Argo values now include an **apiKey-only** `rizz-observer` account
-with `applications,get,rizz-app/rizz-ai-staging` only. Default role stays empty;
-no sync, override, logs, exec, cluster or repository permissions are added. These
-values have not been installed. An operator later generates/stores/revokes its
-token without pasting it into chat or committing it. Argo's in-cluster alias is
-not used to select the Kubernetes endpoint: the observer independently resolves
-the explicit AWS EKS target and reads that cluster directly.
+The Argo Helm values keep anonymous access disabled and the default Argo role
+empty. No Argo API observer account is installed. The Argo bootstrap Terraform
+root grants the cloud-reader EKS group only `get` on the named
+`rizz-ai-staging` Application CR in `argocd`; it grants no Application list or
+write permission. This Kubernetes read bypasses Argo API RBAC by design. The
+observer validates the Application's project, source, destination, compared
+revision and status before reporting delivery. It independently resolves the
+explicit AWS EKS target; Argo's in-cluster alias is not used to select the API
+endpoint.
 
 The backend's existing GitOps read token needs read-only private repository
 contents/PR access. The cloud-reader profile additionally needs the read-only
@@ -100,16 +102,21 @@ target verification permissions in `rizz-ai-cloud-phase-4.md`, and
 same explicit profile. Configured live observation now makes these read-only
 AWS calls; implementation tests use fixtures, with no AWS or Gemini calls.
 
-## Namespace-scoped Kubernetes authorization (not installed)
+## Namespace-scoped Kubernetes authorization
 
-Prepared `infra/cloud-platform/observer/rbac.yaml` is an operator bootstrap
-artifact, outside the unprivileged app recipe. It permits exact-name GETs for
+The Argo bootstrap Terraform root owns the cloud observer Roles and RoleBindings
+in `rizz-staging` and `argocd`, outside the unprivileged app recipe. Its reviewed
+saved plan must be applied after EKS and Argo exist. The staging Role permits
+exact-name GETs for
 Deployments, Services, ConfigMap, Ingress and secret-sync objects, plus namespace
 list access to those resource kinds, Pods and ReplicaSets for retirement
 inventory. It grants no Secrets, node reads, logs, exec or write verbs. RBAC
 does not enforce label selectors on those list permissions, so the reader can
 list the dedicated namespace. The portal returns only bounded evidence, not
 raw objects.
+
+The separate `argocd` Role permits only `get` on the exact Application name.
+The Backstage backend never returns the raw Application object to callers.
 
 The same role permits GET proxy access to the named backend Service so the
 Control Center can fetch `/metrics` through the Kubernetes API. This permission
@@ -121,13 +128,12 @@ process restart and cannot be summed across replicas from this endpoint. A
 failed read shows unavailable rather than zero. The public nginx frontend
 returns 404 for `/metrics`.
 
-Before a real demo, an explicitly reviewed EKS STANDARD access entry must map
-the actual reader IAM role/user ARN to `rizz-cloud-observers`. The operator then
-installs the Role/RoleBinding in the verified EKS namespace. Do not associate
-cluster-admin policies, use root or reuse the bootstrap admin profile. This
-file creates no AWS access entry or identity and invents no membership. Keep
-Kind access separate. The backend needs network access from the allowed
-operator IP to the EKS API and ALB.
+The staging Terraform root creates the dedicated reader IAM role and EKS
+STANDARD access entry mapping it to `rizz-cloud-observers`. The Argo bootstrap
+root then creates the Role/RoleBinding. Do not associate cluster-admin policies,
+use root or reuse the bootstrap admin profile. Neither root grants app GitOps
+permission to edit RBAC. Keep Kind access separate. The backend needs network
+access from the allowed operator IP to the EKS API and ALB.
 
 ## Still pending: live acceptance, not verification code
 

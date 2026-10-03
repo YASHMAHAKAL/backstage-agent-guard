@@ -40,8 +40,8 @@ and renders them with Helm. These tests do not contact AWS or Kubernetes. The
 Argo installer uses the separate checksum-verifying
 `fetch-argocd-chart.mjs` for its pinned archive.
 
-The observer RBAC recipe under `observer/` remains a separate, restricted
-operator setup. It does not give the app publisher EKS credentials.
+The Argo bootstrap Terraform root owns the restricted cloud observer namespace
+Role and RoleBinding. It does not give the app publisher EKS credentials.
 
 ## Live order and cleanup
 

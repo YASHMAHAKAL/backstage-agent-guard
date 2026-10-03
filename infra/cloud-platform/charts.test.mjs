@@ -15,10 +15,6 @@ const values = name =>
   yaml.parse(
     readFileSync(new URL(`./values/${name}.yaml`, import.meta.url), 'utf8'),
   );
-const objects = path =>
-  yaml
-    .parseAllDocuments(readFileSync(new URL(path, import.meta.url), 'utf8'))
-    .map(doc => doc.toJSON());
 
 test('pinned chart archives require exact SHA-256 digests', () => {
   for (const chart of Object.values(lock.charts)) {
@@ -49,20 +45,6 @@ test('controller values keep fixed cluster, namespace, and Pod Identity boundari
     'processClusterGenerator',
   ])
     assert.equal(eso[key], false);
-});
-
-test('observer RBAC excludes Secrets, nodes, and mutations', () => {
-  const [role, binding] = objects('./observer/rbac.yaml');
-  assert.equal(role.metadata.namespace, 'rizz-staging');
-  assert.equal(binding.roleRef.name, role.metadata.name);
-  for (const rule of role.rules) {
-    assert.ok(rule.verbs.every(verb => ['get', 'list'].includes(verb)));
-    assert.ok(
-      rule.resources.every(
-        resource => !['secrets', 'nodes', '*'].includes(resource),
-      ),
-    );
-  }
 });
 
 // Opt-in local Helm smoke rendering. This never contacts AWS or Kubernetes.

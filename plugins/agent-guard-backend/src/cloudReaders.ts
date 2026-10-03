@@ -19,6 +19,7 @@ const exec = promisify(execFile);
 const gitSha = z.string().regex(/^[a-f0-9]{40}$/);
 const metadataName = '/rizz/staging/https-target';
 type AwsRead = (args: string[], signal: AbortSignal) => Promise<unknown>;
+type KubernetesConnection = { endpoint: string; ca: string; token: string };
 
 export class AuthenticatedCloudReaders implements CloudReaders {
   readonly mode = 'authenticated' as const;
@@ -28,6 +29,11 @@ export class AuthenticatedCloudReaders implements CloudReaders {
       githubToken: string;
       awsReader?: AwsRead;
       fetcher?: typeof fetch;
+      kubernetesRead?: (
+        connection: KubernetesConnection,
+        path: string,
+        signal: AbortSignal,
+      ) => Promise<unknown>;
       now?: () => number;
       requireMetadata?: boolean;
     },
@@ -247,6 +253,25 @@ export class AuthenticatedCloudReaders implements CloudReaders {
     )
       throw new Error('Expired EKS credentials');
     return { endpoint: endpoint.origin, ca, token: credentials.status.token };
+  }
+
+  /** Read only the named Argo Application CR through the already authenticated
+   * EKS connection. The argocd namespace Role grants no list or write verbs. */
+  async readArgoApplication(raw: CloudTarget, signal: AbortSignal) {
+    const target = cloudTargetSchema.parse(raw);
+    const connection = await this.readClusterConnection(target, signal);
+    const path = `/apis/argoproj.io/v1alpha1/namespaces/argocd/applications/${encodeURIComponent(
+      target.argoApplication,
+    )}`;
+    if (this.options.kubernetesRead)
+      return this.options.kubernetesRead(connection, path, signal);
+    return readCloudHttpsJson({
+      url: new URL(path, connection.endpoint),
+      ca: connection.ca,
+      token: connection.token,
+      signal,
+      maxBytes: 2 * 1024 * 1024,
+    });
   }
 
   /** A complete, authenticated absence check before deleting the remaining

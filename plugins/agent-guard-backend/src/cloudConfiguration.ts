@@ -39,9 +39,6 @@ export function createCloudConfiguration(
   const delivery = c.getOptionalBoolean('delivery.enabled')
     ? new CloudDeliveryObserver({
         readers,
-        argoCdUrl: c.getString('delivery.argoCdUrl'),
-        argoCdToken: c.getString('delivery.argoCdToken'),
-        argoCdCaBase64: c.getOptionalString('delivery.argoCdCaBase64'),
         destinationServer: c.getString('delivery.destinationServer'),
         runtime: new CloudRuntimeVerifier({ readers }),
       })

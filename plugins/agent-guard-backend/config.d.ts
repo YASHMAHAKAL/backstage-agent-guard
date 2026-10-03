@@ -8,10 +8,6 @@ export interface Config {
       submitterGroups?: string[];
       delivery?: {
         enabled?: boolean;
-        argoCdUrl?: string;
-        /** @visibility secret */
-        argoCdToken?: string;
-        argoCdCaBase64?: string;
         destinationServer?: string;
       };
       target?: {
