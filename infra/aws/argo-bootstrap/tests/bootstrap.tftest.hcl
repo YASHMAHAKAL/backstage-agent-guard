@@ -48,6 +48,10 @@ run "bootstrap_ownership_and_delivery" {
     error_message = "The built-in default project must be closed."
   }
   assert {
+    condition     = kubernetes_manifest.default_project.field_manager[0].force_conflicts == true
+    error_message = "The imported default project must take ownership of Argo's initial wildcard fields."
+  }
+  assert {
     condition     = !contains([for item in kubernetes_manifest.app_project.manifest.spec.namespaceResourceWhitelist : item.kind], "Secret") && !contains([for item in kubernetes_manifest.app_project.manifest.spec.namespaceResourceWhitelist : item.kind], "Role") && !contains([for item in kubernetes_manifest.app_project.manifest.spec.namespaceResourceWhitelist : item.kind], "RoleBinding")
     error_message = "Application GitOps must not manage direct Secrets or Kubernetes RBAC."
   }
@@ -60,7 +64,7 @@ run "bootstrap_ownership_and_delivery" {
     error_message = "Platform controller releases must remain pinned."
   }
   assert {
-    condition     = kubernetes_manifest.platform_app["external-secrets"].manifest.spec.source.helm.valuesObject.scopedNamespace == "rizz-staging" && kubernetes_manifest.platform_app["aws-load-balancer-controller"].manifest.spec.source.helm.valuesObject.vpcId == "vpc-00000000000000000" && kubernetes_manifest.platform_app["aws-load-balancer-controller"].manifest.spec.ignoreDifferences[0].jsonPointers == ["/data"]
+    condition     = kubernetes_manifest.platform_app["external-secrets"].manifest.spec.source.helm.valuesObject.scopedNamespace == "rizz-staging" && kubernetes_manifest.platform_app["aws-load-balancer-controller"].manifest.spec.source.helm.valuesObject.vpcId == "vpc-00000000000000000" && kubernetes_manifest.platform_app["aws-load-balancer-controller"].manifest.spec.ignoreDifferences[0].jsonPointers == ["/data"] && !contains(keys(kubernetes_manifest.platform_app["aws-load-balancer-controller"].manifest.spec.ignoreDifferences[0]), "group")
     error_message = "Controller values must retain namespace/VPC and narrow TLS-difference settings."
   }
   assert {
