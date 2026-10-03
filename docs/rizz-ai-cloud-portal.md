@@ -67,8 +67,8 @@ backend-owned bytes. The agent has submission/status actions, not approval or
 direct execution. Existing version-1 release proposals retain their original
 snapshot and validation paths.
 
-The authenticated rollback form lists only recorded *verified release
-deployments*, not builds or runtime-change records. Preview re-resolves the
+The authenticated rollback form lists only recorded _verified release
+deployments_, not builds or runtime-change records. Preview re-resolves the
 exact retained paired release, reads the current pinned GitOps tree, and
 rejects absent, unsupported or no-op baselines. It permits only the prior
 image pair and bounded replica counts to change; ingress, routing, secret
@@ -99,6 +99,15 @@ entry and a link from `/rizz-releases`. The Kind workflow stays at `/agent-guard
 Default startup registers no cloud target and no cloud MCP actions. The page
 shows an explicit disabled state and does not query AWS, Jev or Scaffolder.
 
+With cloud mode enabled, backend startup validates the local target identity,
+reader credentials and release source without contacting AWS. The configured
+capability and historical proposal views remain available before Terraform
+publishes HTTPS metadata. Each cloud proposal, preview, approval and publishing
+reservation resolves the current HTTPS target for that operation; missing or
+changed metadata fails closed without opening a GitOps PR. Readiness reports
+unavailable cloud evidence as unknown. Enabling cloud mode does not authorize
+deployment or make the target ready.
+
 This local implementation adds the portal, configuration adapter, opt-in
 Template, release path, bounded runtime replica-change path, rollback proposal
 path and staged retirement proposal/publisher/observation path.
@@ -107,7 +116,7 @@ images, configure repository protections, open a PR or deploy to AWS. Tests use
 synthetic transports. UI tests exercise rendering/events; no browser screenshot
 or live cloud success is claimed.
 
-## Prerequisites before opting in
+## Prerequisites before submitting cloud proposals
 
 1. Explicitly authorized AWS foundation and add-ons exist; separate Terraform
    state/ownership, cluster, Argo project/application and private repository access

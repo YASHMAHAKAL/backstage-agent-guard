@@ -68,6 +68,7 @@ export const cloudTargetSchema = cloudTargetFields.refine(
 );
 
 export type CloudTarget = z.infer<typeof cloudTargetSchema>;
+export type CloudTargetMetadata = z.infer<typeof cloudTargetMetadataSchema>;
 
 // Kept equivalent to the offline ALB helper; conformance is regression-tested.
 export function renderCloudIngress(target: CloudTarget) {
