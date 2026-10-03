@@ -30,7 +30,12 @@ import {
   inspectCloudGitopsFiles,
   revalidateCloudSnapshot,
 } from '../cloudSnapshot';
-import { CloudTarget, cloudTargetSchema } from '../cloudTarget';
+import {
+  CloudTarget,
+  CloudTargetMetadata,
+  cloudTargetMetadataSchema,
+  cloudTargetSchema,
+} from '../cloudTarget';
 import {
   decideReview,
   proposalDecisionSchema,
@@ -218,8 +223,42 @@ export class CloudProposalService {
       logger: LoggerService;
       configuration: CloudServiceConfiguration;
     },
-    private readonly target: CloudTarget,
+    private readonly configuredTarget: CloudTarget | CloudTargetMetadata,
+    private readonly resolvedTarget?: CloudTarget,
   ) {}
+
+  private get target(): CloudTarget {
+    if (!this.resolvedTarget)
+      throw new ServiceUnavailableError('Cloud HTTPS metadata unavailable');
+    return this.resolvedTarget;
+  }
+
+  // A separate service instance pins one target for the whole operation. Never
+  // mutate a shared target while concurrent requests are rendering snapshots.
+  private async forRequest(): Promise<CloudProposalService> {
+    if (this.resolvedTarget) return this;
+    try {
+      const target = await this.options.configuration.readers.resolveTarget?.(
+        this.configuredTarget,
+        AbortSignal.timeout(10000),
+      );
+      const resolved = cloudTargetSchema.parse(target);
+      const metadata = cloudTargetMetadataSchema.parse({
+        ...resolved,
+        ingress: { operatorCidr: resolved.ingress.operatorCidr },
+      });
+      if (canonicalize(metadata) !== canonicalize(this.configuredTarget))
+        throw new Error('Cloud target differs from configured identity');
+      return new CloudProposalService(
+        this.client,
+        this.options,
+        this.configuredTarget,
+        resolved,
+      );
+    } catch {
+      throw new ServiceUnavailableError('Cloud HTTPS metadata unavailable');
+    }
+  }
 
   static async create(options: {
     database: DatabaseService;
@@ -235,15 +274,14 @@ export class CloudProposalService {
       throw new ServiceUnavailableError(
         'Authenticated cloud readers are required',
       );
-    const target = cloudTargetSchema.safeParse(options.configuration.target)
-      .success
-      ? cloudTargetSchema.parse(options.configuration.target)
-      : await options.configuration.readers.resolveTarget?.(
-          options.configuration.target,
-          AbortSignal.timeout(10000),
-        );
-    if (!target)
-      throw new ServiceUnavailableError('Cloud HTTPS metadata unavailable');
+    const fullTarget = cloudTargetSchema.safeParse(
+      options.configuration.target,
+    );
+    const target = fullTarget.success
+      ? fullTarget.data
+      : cloudTargetMetadataSchema.parse(options.configuration.target);
+    if (!fullTarget.success && !options.configuration.readers.resolveTarget)
+      throw new ServiceUnavailableError('Cloud HTTPS metadata reader required');
     z.array(z.string().regex(/^group:default\/[a-z0-9][a-z0-9-]*$/))
       .min(1)
       .max(10)
@@ -266,7 +304,12 @@ export class CloudProposalService {
         table.text('record').notNullable();
       });
     }
-    return new CloudProposalService(client, options, target);
+    return new CloudProposalService(
+      client,
+      options,
+      target,
+      fullTarget.success ? fullTarget.data : undefined,
+    );
   }
 
   private async viewer(credentials: BackstageCredentials): Promise<Viewer> {
@@ -302,7 +345,7 @@ export class CloudProposalService {
   ) {
     const groups = includeApplicationGroup
       ? applicationReviewerGroups
-      : [this.target.owner];
+      : [this.configuredTarget.owner];
     for (const ref of groups) {
       const group = await this.options.catalog.getEntityByRef(ref, {
         credentials,
@@ -360,11 +403,11 @@ export class CloudProposalService {
         distinctReviewerRequired: true as const,
       },
       target: {
-        id: this.target.id,
-        clusterName: this.target.clusterName,
-        namespace: this.target.namespace,
-        owner: this.target.owner,
-        region: this.target.region,
+        id: this.configuredTarget.id,
+        clusterName: this.configuredTarget.clusterName,
+        namespace: this.configuredTarget.namespace,
+        owner: this.configuredTarget.owner,
+        region: this.configuredTarget.region,
       },
       exposure: 'restricted_alb_https' as const,
       readiness:
@@ -415,6 +458,14 @@ export class CloudProposalService {
   }
 
   async previewRuntime(input: unknown, credentials: BackstageCredentials) {
+    await this.viewer(credentials);
+    return (await this.forRequest()).previewRuntimeReady(input, credentials);
+  }
+
+  private async previewRuntimeReady(
+    input: unknown,
+    credentials: BackstageCredentials,
+  ) {
     const viewer = await this.viewer(credentials);
     if (
       !viewer.groups.some(group =>
@@ -472,6 +523,10 @@ export class CloudProposalService {
     credentials: BackstageCredentials,
     channel: SubmissionChannel,
   ): Promise<CloudProposalView> {
+    if (!this.resolvedTarget) {
+      await this.viewer(credentials);
+      return (await this.forRequest()).submit(input, credentials, channel);
+    }
     const viewer = await this.viewer(credentials);
     if (
       !viewer.groups.some(g =>
@@ -562,6 +617,14 @@ export class CloudProposalService {
     credentials: BackstageCredentials,
     channel: SubmissionChannel,
   ): Promise<CloudProposalView> {
+    if (!this.resolvedTarget) {
+      await this.viewer(credentials);
+      return (await this.forRequest()).submitRuntime(
+        input,
+        credentials,
+        channel,
+      );
+    }
     const viewer = await this.viewer(credentials);
     if (
       !viewer.groups.some(group =>
@@ -756,6 +819,14 @@ export class CloudProposalService {
   }
 
   async previewRollback(input: unknown, credentials: BackstageCredentials) {
+    await this.viewer(credentials);
+    return (await this.forRequest()).previewRollbackReady(input, credentials);
+  }
+
+  private async previewRollbackReady(
+    input: unknown,
+    credentials: BackstageCredentials,
+  ) {
     const { candidate, current, snapshot } = await this.prepareRollback(
       input,
       credentials,
@@ -795,6 +866,14 @@ export class CloudProposalService {
     credentials: BackstageCredentials,
     channel: SubmissionChannel,
   ): Promise<CloudProposalView> {
+    if (!this.resolvedTarget) {
+      await this.viewer(credentials);
+      return (await this.forRequest()).submitRollback(
+        input,
+        credentials,
+        channel,
+      );
+    }
     const id = randomUUID();
     const { viewer, current, snapshot } = await this.prepareRollback(
       input,
@@ -1048,6 +1127,14 @@ export class CloudProposalService {
   }
 
   async previewRetirement(input: unknown, credentials: BackstageCredentials) {
+    await this.viewer(credentials);
+    return (await this.forRequest()).previewRetirementReady(input, credentials);
+  }
+
+  private async previewRetirementReady(
+    input: unknown,
+    credentials: BackstageCredentials,
+  ) {
     const { snapshot, state } = await this.prepareRetirement(
       input,
       credentials,
@@ -1081,6 +1168,14 @@ export class CloudProposalService {
     credentials: BackstageCredentials,
     channel: SubmissionChannel,
   ): Promise<CloudProposalView> {
+    if (!this.resolvedTarget) {
+      await this.viewer(credentials);
+      return (await this.forRequest()).submitRetirement(
+        input,
+        credentials,
+        channel,
+      );
+    }
     const id = randomUUID();
     const { viewer, snapshot, state } = await this.prepareRetirement(
       input,
@@ -1210,6 +1305,14 @@ export class CloudProposalService {
     return result;
   }
   async observeRetirement(id: string, credentials: BackstageCredentials) {
+    await this.viewer(credentials);
+    return (await this.forRequest()).observeRetirementReady(id, credentials);
+  }
+
+  private async observeRetirementReady(
+    id: string,
+    credentials: BackstageCredentials,
+  ) {
     const proposal = await this.get(id, credentials);
     const snapshot = proposal.snapshot;
     if (
@@ -1434,9 +1537,17 @@ export class CloudProposalService {
       | 'retiring'
       | 'retired'
       | 'unavailable' = 'unavailable';
+    let target: CloudTarget | undefined;
     try {
+      target = (await this.forRequest()).target;
+    } catch {
+      // Cloud metadata is not available yet; independent catalog, release and
+      // history checks can still be shown as unknown or current evidence.
+    }
+    try {
+      if (!target) throw new Error('Cloud target unavailable');
       const desired = await this.options.configuration.readers.readGitops(
-        this.target,
+        target,
         AbortSignal.timeout(15000),
       );
       if (desired.contents) {
@@ -1472,9 +1583,10 @@ export class CloudProposalService {
           candidate.sourceRelease.recordDigest,
         )
       : undefined;
-    const metrics = this.options.configuration.metrics
-      ? await this.options.configuration.metrics.observe(this.target)
-      : { state: 'unavailable' as const };
+    const metrics =
+      this.options.configuration.metrics && target
+        ? await this.options.configuration.metrics.observe(target)
+        : { state: 'unavailable' as const };
     type State = 'pass' | 'fail' | 'unknown';
     const check = (
       id: string,
@@ -1483,6 +1595,36 @@ export class CloudProposalService {
       detail: string,
       evidenceUrl: string,
     ) => ({ id, title, state, detail, evidenceUrl, checkedAt });
+    let pairedReleaseState: State = 'unknown';
+    let pairedReleaseDetail =
+      'Trusted CI evidence is unavailable or not configured.';
+    if (releases.state === 'available') {
+      pairedReleaseState = releaseAvailable ? 'pass' : 'fail';
+      pairedReleaseDetail = releaseAvailable
+        ? 'At least one current paired release has verified CI and immutable image evidence.'
+        : 'No eligible paired release is available.';
+    }
+    const desiredRecipeDetails = {
+      verified:
+        'The pinned GitOps files match the platform recipe, including both workloads’ health probes and CPU/memory requests and limits. This does not prove live rollout.',
+      absent: 'No application GitOps configuration exists yet.',
+      retiring:
+        'Retirement has removed ingress from desired state; application workloads remain until the next reviewed stage.',
+      retired:
+        'The empty retirement marker is the current desired state; app probes and resource bounds are no longer applicable.',
+      unavailable:
+        'The desired GitOps recipe could not be read or differs from the supported recipe.',
+    };
+    let rollbackState: State = 'unknown';
+    let rollbackDetail =
+      'No previously healthy release deployment is recorded.';
+    if (candidate) {
+      rollbackState = retained?.state === 'verified' ? 'pass' : 'fail';
+      rollbackDetail =
+        retained?.state === 'verified'
+          ? 'A recorded healthy release still resolves to its exact CI artifact and image pair.'
+          : 'Recorded healthy release evidence is missing, expired or incompatible.';
+    }
     return {
       checkedAt,
       scope: 'rizz-ai/eks-staging',
@@ -1526,31 +1668,15 @@ export class CloudProposalService {
         check(
           'paired_release',
           'Verified paired release',
-          releases.state !== 'available'
-            ? 'unknown'
-            : releaseAvailable
-            ? 'pass'
-            : 'fail',
-          releases.state !== 'available'
-            ? 'Trusted CI evidence is unavailable or not configured.'
-            : releaseAvailable
-            ? 'At least one current paired release has verified CI and immutable image evidence.'
-            : 'No eligible paired release is available.',
+          pairedReleaseState,
+          pairedReleaseDetail,
           '/rizz-releases',
         ),
         check(
           'desired_recipe',
           'Probes and resource bounds',
           desiredRecipe === 'verified' ? 'pass' : 'unknown',
-          desiredRecipe === 'verified'
-            ? 'The pinned GitOps files match the platform recipe, including both workloads’ health probes and CPU/memory requests and limits. This does not prove live rollout.'
-            : desiredRecipe === 'absent'
-            ? 'No application GitOps configuration exists yet.'
-            : desiredRecipe === 'retiring'
-            ? 'Retirement has removed ingress from desired state; application workloads remain until the next reviewed stage.'
-            : desiredRecipe === 'retired'
-            ? 'The empty retirement marker is the current desired state; app probes and resource bounds are no longer applicable.'
-            : 'The desired GitOps recipe could not be read or differs from the supported recipe.',
+          desiredRecipeDetails[desiredRecipe],
           '/rizz-deployments',
         ),
         check(
@@ -1565,16 +1691,8 @@ export class CloudProposalService {
         check(
           'retained_rollback',
           'Retained rollback source',
-          !candidate
-            ? 'unknown'
-            : retained?.state === 'verified'
-            ? 'pass'
-            : 'fail',
-          !candidate
-            ? 'No previously healthy release deployment is recorded.'
-            : retained?.state === 'verified'
-            ? 'A recorded healthy release still resolves to its exact CI artifact and image pair.'
-            : 'Recorded healthy release evidence is missing, expired or incompatible.',
+          rollbackState,
+          rollbackDetail,
           '/rizz-deployments#rollback-form',
         ),
         check(
@@ -1593,9 +1711,20 @@ export class CloudProposalService {
     const viewer = await this.viewer(credentials);
     if (!applicationReviewerGroups.some(group => viewer.groups.includes(group)))
       throw new NotAllowedError('Rizz.AI metrics are role-scoped');
-    return this.options.configuration.metrics
-      ? this.options.configuration.metrics.observe(this.target)
-      : { state: 'unavailable' as const, checkedAt: new Date().toISOString() };
+    if (!this.options.configuration.metrics)
+      return {
+        state: 'unavailable' as const,
+        checkedAt: new Date().toISOString(),
+      };
+    try {
+      const target = (await this.forRequest()).target;
+      return await this.options.configuration.metrics.observe(target);
+    } catch {
+      return {
+        state: 'unavailable' as const,
+        checkedAt: new Date().toISOString(),
+      };
+    }
   }
   async list(credentials: BackstageCredentials) {
     const viewer = await this.viewer(credentials);
@@ -1752,7 +1881,11 @@ export class CloudProposalService {
         );
     }
   }
-  async decide(id: string, input: unknown, credentials: BackstageCredentials) {
+  async decide(
+    id: string,
+    input: unknown,
+    credentials: BackstageCredentials,
+  ): Promise<CloudProposalView> {
     const viewer = await this.viewer(credentials);
     const record = await this.stored(id);
     if (!this.visible(record, viewer))
@@ -1765,6 +1898,8 @@ export class CloudProposalService {
       );
     if (parsed.data.digest !== record.snapshot.digest)
       throw new ConflictError('Cloud approval digest changed');
+    if (parsed.data.decision === 'approve' && !this.resolvedTarget)
+      return (await this.forRequest()).decide(id, input, credentials);
     await this.groupExists(
       credentials,
       this.reviewerGroups(record).includes(applicationReviewerGroups[0]),
@@ -1893,7 +2028,16 @@ export class CloudProposalService {
     proposalId: string;
     taskId: string;
     claim: string;
-  }) {
+  }): Promise<{
+    operation: CloudProposalRecord['snapshot']['envelope']['kind'];
+    files: CloudProposalRecord['snapshot']['files'];
+    deletePaths?: string[];
+    target: CloudTarget;
+    baseRevision: string;
+    branchName: string;
+    approvedDigest: string;
+    createdAt: string;
+  }> {
     const record = await this.stored(input.proposalId);
     this.requireClaim(record, input);
     const firstReservation =
@@ -1904,6 +2048,8 @@ export class CloudProposalService {
       record.execution?.state === 'publishing';
     if (!firstReservation && !recovery)
       throw new ConflictError('Cloud publication is not available');
+    if (!this.resolvedTarget)
+      return (await this.forRequest()).reservePublish(input);
     await this.reviewerStillAuthorized(record);
     await this.recheck(record);
     if (firstReservation)
@@ -1940,7 +2086,7 @@ export class CloudProposalService {
       record.execution?.state !== 'publishing'
     )
       throw new ConflictError('No cloud publication awaiting completion');
-    const repo = this.target.gitopsRepository.replace(/\.git$/, '');
+    const repo = this.configuredTarget.gitopsRepository.replace(/\.git$/, '');
     if (
       !Number.isSafeInteger(input.prNumber) ||
       input.prNumber < 1 ||

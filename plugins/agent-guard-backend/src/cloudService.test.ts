@@ -95,6 +95,7 @@ async function start(
     missingTemplate?: boolean;
     wrongAppOwner?: boolean;
     delivery?: boolean;
+    deferredTarget?: boolean;
   } = {},
 ) {
   process.env.AGENT_GUARD_AUTH_MODE = 'github';
@@ -174,6 +175,12 @@ async function start(
     verifyTarget,
     readGitops,
   };
+  const targetAvailability = { ready: false };
+  const resolveTarget = jest.fn().mockImplementation(async () => {
+    if (!targetAvailability.ready) throw new Error('Private AWS error');
+    return target;
+  });
+  if (options.deferredTarget) readers.resolveTarget = resolveTarget;
   const fetcher = jest.fn().mockImplementation(async () =>
     options.unavailable
       ? new Response(null, { status: 503 })
@@ -303,7 +310,12 @@ async function start(
         ...(!options.disabled
           ? {
               cloud: {
-                target,
+                target: options.deferredTarget
+                  ? {
+                      ...target,
+                      ingress: { operatorCidr: target.ingress.operatorCidr },
+                    }
+                  : target,
                 releases,
                 readers,
                 ...(options.delivery ? { delivery: { observe } } : {}),
@@ -334,6 +346,8 @@ async function start(
     resolve,
     verifyTarget,
     readGitops,
+    resolveTarget,
+    targetAvailability,
     base,
     proposal,
     observe,
@@ -558,7 +572,9 @@ describe('authenticated cloud service using ONLY synthetic backend/reader/CI fix
       .get('/api/agent-guard/rizz/metrics')
       .set('Authorization', header())
       .expect(200)
-      .expect(response => expect(response.body.state).toBe('unavailable'));
+      .expect(metricsResponse =>
+        expect(metricsResponse.body.state).toBe('unavailable'),
+      );
   });
   it('authorizes cloud delivery reads before provider access and never mutates a proposal', async () => {
     const s = await start({ delivery: true });
@@ -889,6 +905,61 @@ describe('authenticated cloud service using ONLY synthetic backend/reader/CI fix
     expect(s.verifyTarget).not.toHaveBeenCalled();
     expect(s.resolve).not.toHaveBeenCalled();
     expect(s.fetcher).not.toHaveBeenCalled();
+  });
+  it('starts without cloud HTTPS metadata, recovers for proposals, and fails closed for approval', async () => {
+    const s = await start({ deferredTarget: true });
+    expect(s.resolveTarget).not.toHaveBeenCalled();
+    await request(s.server)
+      .get('/api/agent-guard/rizz/capabilities')
+      .set('Authorization', header())
+      .expect(200)
+      .expect(response => expect(response.body.state).toBe('configured'));
+    expect(s.resolveTarget).not.toHaveBeenCalled();
+    await request(s.server)
+      .get('/api/agent-guard/rizz/readiness')
+      .set('Authorization', header())
+      .expect(200)
+      .expect(response =>
+        expect(
+          response.body.checks.find(
+            (check: { id: string }) => check.id === 'desired_recipe',
+          ).state,
+        ).toBe('unknown'),
+      );
+    await request(s.server)
+      .post(url)
+      .set('Authorization', header())
+      .send(s.proposal)
+      .expect(503)
+      .expect(response =>
+        expect(JSON.stringify(response.body)).not.toContain(
+          'Private AWS error',
+        ),
+      );
+    expect(s.verifyTarget).not.toHaveBeenCalled();
+    expect(s.scaffolder.scaffold).not.toHaveBeenCalled();
+
+    s.targetAvailability.ready = true;
+    const created = await request(s.server)
+      .post(url)
+      .set('Authorization', header())
+      .send(s.proposal)
+      .expect(201);
+    expect(created.body.snapshot.envelope.target).toEqual(target);
+    expect(s.verifyTarget).toHaveBeenCalledTimes(1);
+
+    s.targetAvailability.ready = false;
+    await request(s.server)
+      .post(`${url}/${created.body.id}/decision`)
+      .set('Authorization', header('reviewer'))
+      .send({ decision: 'approve', digest: created.body.snapshot.digest })
+      .expect(503);
+    expect(s.scaffolder.scaffold).not.toHaveBeenCalled();
+    await request(s.server)
+      .post(`${url}/${created.body.id}/decision`)
+      .set('Authorization', header('reviewer'))
+      .send({ decision: 'reject', digest: created.body.snapshot.digest })
+      .expect(200);
   });
   it('allows a distinct mapped application peer to review a new routine release', async () => {
     const s = await start();
