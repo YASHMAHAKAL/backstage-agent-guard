@@ -653,7 +653,8 @@ export function CloudDeploymentsPage() {
           </p>
           <div className="ag-create__actions">
             <a href="/rizz-releases">Browse release evidence</a>
-            <a href="/agent-guard">Kind demo requests</a>
+            <a href="/agent-guard">All governed requests</a>
+            <a href="/agent-guard/kind">Kind demo requests</a>
             <button
               className="ag-button"
               type="button"

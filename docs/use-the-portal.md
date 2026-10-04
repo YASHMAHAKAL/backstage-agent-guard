@@ -16,6 +16,13 @@ TechDocs appears under **Catalog → Backstage Agent Guard → Docs**. The basic
 TechDocs setup generates this repository's Markdown on demand; its configured
 generator needs Docker available to the Backstage backend.
 
+**Agent Guard** at `/agent-guard` is the request overview. It combines the Kind
+service and Rizz.AI proposal histories visible to your signed-in identity.
+Filter by your requests, requests awaiting your review, or workflow. Each row
+opens the appropriate detailed review page. With the cloud profile off, mapped
+users can still see authorized Rizz.AI history, but cloud actions and detailed
+cloud review remain unavailable.
+
 For two-person review, configure the GitHub sign-in profile with two separate
 GitHub accounts mapped to Backstage users. Copy
 `examples/github-users.example.yaml` to the ignored
@@ -33,7 +40,7 @@ descriptors, documentation, proposal text, or GitOps manifests.
 
 ## Submit an Agent Guard service proposal
 
-1. Open **Agent Guard → New proposal**. Choose the internal Node.js API,
+1. Open **Agent Guard → New Kind request**. Choose the internal Node.js API,
    FastAPI service, or scheduled worker. Enter the service name, existing
    owning group, staging inputs, and what you want changed.
 2. Inspect the rendered files, scope checks, Jev assessment, and approval

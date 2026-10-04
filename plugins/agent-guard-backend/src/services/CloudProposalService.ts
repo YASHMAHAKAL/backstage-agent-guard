@@ -62,6 +62,11 @@ import {
   reviewerGroupsForPolicy,
 } from '../cloudReviewPolicy';
 import {
+  canViewCloudProposal,
+  CloudViewer,
+  getCloudViewer,
+} from './cloudAccess';
+import {
   CloudVerifiedDeployment,
   verifiedCloudDeployment,
   verifiedDeploymentSummary,
@@ -173,7 +178,7 @@ export interface CloudServiceConfiguration {
   metrics?: CloudMetricsReader;
 }
 type Client = Awaited<ReturnType<DatabaseService['getClient']>>;
-type Viewer = { ref: string; groups: string[] };
+type Viewer = CloudViewer;
 export interface CloudProposalRecord {
   id: string;
   version: number;
@@ -313,30 +318,7 @@ export class CloudProposalService {
   }
 
   private async viewer(credentials: BackstageCredentials): Promise<Viewer> {
-    if (
-      !this.options.auth.isPrincipal(credentials, 'user') ||
-      credentials.principal.userEntityRef === 'user:default/guest'
-    )
-      throw new NotAllowedError(
-        'Cloud requests require a mapped non-guest user',
-      );
-    const ref = credentials.principal.userEntityRef;
-    const info = await this.options.userInfo.getUserInfo(credentials);
-    const entity = await this.options.catalog.getEntityByRef(ref, {
-      credentials,
-    });
-    if (!entity || entity.kind !== 'User')
-      throw new NotAllowedError('Cloud user is not mapped in the catalog');
-    // Require both authenticated ownership claims and current catalog relations.
-    const memberships = (entity.relations ?? [])
-      .filter(r => r.type === 'memberOf')
-      .map(r => r.targetRef);
-    return {
-      ref,
-      groups: info.ownershipEntityRefs.filter(group =>
-        memberships.includes(group),
-      ),
-    };
+    return getCloudViewer(this.options, credentials);
   }
 
   private async groupExists(
@@ -1235,10 +1217,7 @@ export class CloudProposalService {
     return JSON.parse(row.record);
   }
   private visible(record: CloudProposalRecord, viewer: Viewer) {
-    return (
-      record.requester === viewer.ref ||
-      this.reviewerGroups(record).some(group => viewer.groups.includes(group))
-    );
+    return canViewCloudProposal(record, viewer);
   }
   private reviewerGroups(record: CloudProposalRecord) {
     return reviewerGroupsForPolicy(record.snapshot.envelope.policyVersion);

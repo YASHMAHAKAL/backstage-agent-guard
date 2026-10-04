@@ -6,15 +6,15 @@ ownership; it does not prove that a workload or cloud resource currently exists.
 
 ## Platform services
 
-| Part                                                | Meaning and responsibility                                                                                                           | Owner                       |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------- |
-| Backstage frontend (`packages/app`)                 | Catalog, Agent Guard review, Rizz.AI Control Center, release/deployment pages, and TechDocs UI                                       | `platform-team`             |
-| Backstage backend (`packages/backend`)              | Hosts Catalog, Scaffolder, authentication, TechDocs, search, Kubernetes reads, and the Agent Guard API                               | `platform-team`             |
-| Agent Guard frontend (`plugins/agent-guard`)        | Shows proposals, exact file previews, policy reasons, approval decisions, and read-only delivery observations                        | `platform-team`             |
-| Agent Guard backend (`plugins/agent-guard-backend`) | Validates bounded requests, stores snapshots/audit history, invokes Jev, checks review eligibility, and reserves private publication | `platform-team`             |
-| Agent Guard permission module                       | Denies ordinary users direct protected Scaffolder execution; the backend publisher checks approved task claims again                 | `platform-team`             |
-| Backstage MCP Actions                               | Exposes submission/status actions to an agent; it is not a Kubernetes or Terraform execution endpoint                                | `platform-team`             |
-| Jev                                                 | Compares declared intent with the proposed change; its choice and score inform review but never grant authority                      | External assessment service |
+| Part                                                | Meaning and responsibility                                                                                                                          | Owner                       |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Backstage frontend (`packages/app`)                 | Catalog, Agent Guard review, Rizz.AI Control Center, release/deployment pages, and TechDocs UI                                                      | `platform-team`             |
+| Backstage backend (`packages/backend`)              | Hosts Catalog, Scaffolder, authentication, TechDocs, search, Kubernetes reads, and the Agent Guard API                                              | `platform-team`             |
+| Agent Guard frontend (`plugins/agent-guard`)        | Combines authorized request summaries; dedicated Kind and Rizz.AI pages show exact file previews, policy reasons, review, and delivery observations | `platform-team`             |
+| Agent Guard backend (`plugins/agent-guard-backend`) | Validates bounded requests, stores snapshots/audit history, invokes Jev, checks review eligibility, and reserves private publication                | `platform-team`             |
+| Agent Guard permission module                       | Denies ordinary users direct protected Scaffolder execution; the backend publisher checks approved task claims again                                | `platform-team`             |
+| Backstage MCP Actions                               | Exposes submission/status actions to an agent; it is not a Kubernetes or Terraform execution endpoint                                               | `platform-team`             |
+| Jev                                                 | Compares declared intent with the proposed change; its choice and score inform review but never grant authority                                     | External assessment service |
 
 The local service demo uses three platform-owned Scaffolder templates under
 `catalog/templates/`: Node.js API, FastAPI service, and CronJob worker. They
