@@ -162,7 +162,7 @@ it('opens an authorized proposal from a Control Center deep link without mutatin
   );
   render(<CloudDeploymentsPage />);
   expect(
-    await screen.findByRole('heading', { name: 'Review the cloud change' }),
+    await screen.findByRole('heading', { name: 'Intent and proposed change' }),
   ).toBeInTheDocument();
   expect(
     screen.getByRole('button', { name: 'Approve exact cloud snapshot' }),
@@ -172,7 +172,11 @@ it('opens an authorized proposal from a Control Center deep link without mutatin
 async function ready() {
   await screen.findByRole('heading', { name: 'Cloud review queue' });
 }
+function openForm() {
+  fireEvent.click(screen.getByRole('button', { name: '+ New proposal' }));
+}
 function fill() {
+  openForm();
   fireEvent.change(screen.getByLabelText('Verified release'), {
     target: { value: release.releaseId },
   });
@@ -205,7 +209,7 @@ it('submits only a verified paired release proposal, never direct Scaffolder or 
   fireEvent.click(
     screen.getByRole('button', { name: 'Submit cloud proposal' }),
   );
-  await screen.findByRole('heading', { name: 'Review the cloud change' });
+  await screen.findByRole('heading', { name: 'Intent and proposed change' });
   const writes = mockFetch.mock.calls.filter(
     ([, init]) => init?.method === 'POST',
   );
@@ -303,7 +307,8 @@ it('previews and submits a bounded runtime change without requesting Scaffolder'
   });
   render(<CloudDeploymentsPage />);
   await ready();
-  fireEvent.click(screen.getByRole('button', { name: 'Change replicas' }));
+  openForm();
+  fireEvent.click(screen.getByRole('button', { name: /^Change replicas/ }));
   fireEvent.change(screen.getByLabelText('Runtime change intent'), {
     target: { value: 'Increase only the Rizz.AI backend to two replicas.' },
   });
@@ -406,7 +411,8 @@ it('previews a recorded healthy release before submitting a rollback proposal', 
   });
   render(<CloudDeploymentsPage />);
   await ready();
-  fireEvent.click(screen.getByRole('button', { name: 'Rollback' }));
+  openForm();
+  fireEvent.click(screen.getByRole('button', { name: /^Rollback/ }));
   expect(
     screen.queryByRole('option', { name: /2026-09-28T11:00/ }),
   ).not.toBeInTheDocument();
@@ -463,6 +469,7 @@ it.each(['fixture', 'expired'])(
           };
     render(<CloudDeploymentsPage />);
     await ready();
+    openForm();
     expect(screen.getByLabelText('Verified release')).toBeDisabled();
     expect(
       screen.queryByRole('option', { name: release.releaseId }),
@@ -477,6 +484,7 @@ it('release-source outage blocks new proposals but preserves the authorized revi
   releaseListing = { state: 'unavailable', items: [] };
   render(<CloudDeploymentsPage />);
   await ready();
+  openForm();
   expect(screen.getByLabelText('Verified release')).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: /pending approval/i }));
   expect(
@@ -518,9 +526,17 @@ it('shows one request form and formats review manifests without changing approve
   items = [proposal(true)];
   render(<CloudDeploymentsPage />);
   await ready();
+  openForm();
   expect(
     screen.getByRole('button', { name: 'Submit cloud proposal' }),
   ).toBeInTheDocument();
+  expect(
+    screen
+      .getByRole('button', { name: /Paired release/ })
+      .closest('.ag-create'),
+  ).toContainElement(
+    screen.getByRole('button', { name: 'Submit cloud proposal' }),
+  );
   expect(
     screen.queryByRole('button', { name: 'Preview exact change' }),
   ).not.toBeInTheDocument();
@@ -559,7 +575,7 @@ it('unauthorized/requester views have no approval buttons; refresh failure remov
     screen.queryByRole('button', { name: 'Approve exact cloud snapshot' }),
   ).not.toBeInTheDocument();
   failRead = true;
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh cloud data' }));
+  fireEvent.click(screen.getByRole('button', { name: /Refresh/ }));
   await screen.findByRole('alert');
   expect(screen.queryByRole('meter')).not.toBeInTheDocument();
   expect(screen.queryByText(/credential-not-for-ui/)).not.toBeInTheDocument();
