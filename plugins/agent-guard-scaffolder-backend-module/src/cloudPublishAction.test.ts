@@ -1,4 +1,5 @@
 import {
+  CloudGuardClient,
   CloudPublishPlan,
   ExactBaseCloudPublisher,
   createCloudPublishAction,
@@ -35,6 +36,41 @@ const plan: CloudPublishPlan = {
     sha256: digest('{}\n'),
   })),
 };
+
+it('allows the bounded reservation recheck to finish before timing out', async () => {
+  const deadlines: number[] = [];
+  const timeout = jest.spyOn(AbortSignal, 'timeout').mockImplementation(ms => {
+    deadlines.push(ms);
+    return new AbortController().signal;
+  });
+  const fetcher = jest
+    .spyOn(global, 'fetch')
+    .mockResolvedValueOnce(Response.json(plan))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  try {
+    const guard = new CloudGuardClient({
+      auth: {
+        getOwnServiceCredentials: async () => ({}),
+        getPluginRequestToken: async () => ({ token: 'test-token' }),
+      },
+      discovery: { getBaseUrl: async () => 'http://localhost:7007' },
+    } as never);
+    const claim = { proposalId, taskId: 'task-1', claim: 'a'.repeat(43) };
+    await expect(guard.reserve(claim)).resolves.toEqual(plan);
+    await expect(
+      guard.complete({
+        ...claim,
+        prUrl: 'https://github.com/example/gitops/pull/7',
+        prNumber: 7,
+      }),
+    ).resolves.toBeUndefined();
+    expect(deadlines).toEqual([90000, 30000]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally {
+    fetcher.mockRestore();
+    timeout.mockRestore();
+  }
+});
 // Synthetic GitHub in-memory transport only. No network, token lookup or PR.
 function harness(
   options: {

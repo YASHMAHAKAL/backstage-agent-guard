@@ -50,20 +50,17 @@ const hash = (value: string) =>
 function validatePlan(value: CloudPublishPlan, proposalId: string) {
   const t = value?.target;
   const deleted = value?.deletePaths ?? [];
-  const expectedFiles =
-    value?.operation === 'rizz_cloud_retire_ingress'
-      ? filenames.filter(name => name !== 'ingress.yaml')
-      : value?.operation === 'rizz_cloud_retire_app'
-      ? ['kustomization.yaml']
-      : filenames;
-  const expectedDeleted =
-    value?.operation === 'rizz_cloud_retire_ingress'
-      ? ['ingress.yaml']
-      : value?.operation === 'rizz_cloud_retire_app'
-      ? filenames.filter(
-          name => name !== 'ingress.yaml' && name !== 'kustomization.yaml',
-        )
-      : [];
+  let expectedFiles = filenames;
+  let expectedDeleted: string[] = [];
+  if (value?.operation === 'rizz_cloud_retire_ingress') {
+    expectedFiles = filenames.filter(name => name !== 'ingress.yaml');
+    expectedDeleted = ['ingress.yaml'];
+  } else if (value?.operation === 'rizz_cloud_retire_app') {
+    expectedFiles = ['kustomization.yaml'];
+    expectedDeleted = filenames.filter(
+      name => name !== 'ingress.yaml' && name !== 'kustomization.yaml',
+    );
+  }
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
       proposalId,
@@ -131,7 +128,10 @@ export class CloudGuardClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30000),
+      // Reservation rechecks GitOps and live AWS evidence. The backend bounds
+      // those sequential reads at 60 seconds; give it time to return its
+      // decision before treating the result as ambiguous.
+      signal: AbortSignal.timeout(path === 'reserve' ? 90000 : 30000),
       redirect: 'error',
     });
     if (!response.ok) {
