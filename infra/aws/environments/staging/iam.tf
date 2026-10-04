@@ -31,7 +31,7 @@ locals {
   lbc_upstream = jsondecode(file("${path.module}/policies/lbc-v3.5.0.upstream.json"))
   lbc_policy = {
     Version = local.lbc_upstream.Version
-    Statement = [for statement in local.lbc_upstream.Statement : merge(statement, {
+    Statement = concat([for statement in local.lbc_upstream.Statement : merge(statement, {
       Action   = [for action in statement.Action : action if !startswith(action, "waf") && !startswith(action, "shield:") && !startswith(action, "cognito-idp:") && action != "elasticloadbalancing:SetWebAcl" && !startswith(action, "iam:ListServer") && !startswith(action, "iam:GetServer")]
       Resource = [for arn in flatten([statement.Resource]) : replace(replace(arn, "arn:aws:ec2:*:*:", "arn:aws:ec2:us-east-1:${var.expected_account_id}:"), "arn:aws:elasticloadbalancing:*:*:", "arn:aws:elasticloadbalancing:us-east-1:${var.expected_account_id}:") if !strcontains(arn, "/net/")]
       Condition = merge(try(statement.Condition, {}), {
@@ -41,9 +41,32 @@ locals {
           try(statement.Condition.Null["aws:ResourceTag/elbv2.k8s.aws/cluster"], "true") == "false" ? { "aws:ResourceTag/elbv2.k8s.aws/cluster" = local.cluster_name } : {}
         )
         # Include backend node security groups in this VPC, not arbitrary VPCs.
-        ArnEquals = merge(try(statement.Condition.ArnEquals, {}), contains(statement.Action, "ec2:AuthorizeSecurityGroupIngress") || contains(statement.Action, "ec2:CreateSecurityGroup") ? { "ec2:Vpc" = "arn:aws:ec2:us-east-1:${var.expected_account_id}:vpc/${aws_vpc.staging.id}" } : {})
+        ArnEquals = merge(try(statement.Condition.ArnEquals, {}), contains(statement.Action, "ec2:AuthorizeSecurityGroupIngress") ? { "ec2:Vpc" = "arn:aws:ec2:us-east-1:${var.expected_account_id}:vpc/${aws_vpc.staging.id}" } : {})
       })
-    })]
+      }) if !contains(statement.Action, "ec2:CreateSecurityGroup")], [
+      # CreateSecurityGroup authorizes both the new security group and its VPC.
+      # ec2:Vpc is not present for the VPC resource, so split the grants instead
+      # of applying that condition to both resources.
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:CreateSecurityGroup"]
+        Resource = ["arn:aws:ec2:us-east-1:${var.expected_account_id}:security-group/*"]
+        Condition = { StringEquals = {
+          "aws:RequestedRegion" = "us-east-1"
+        } }
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:CreateSecurityGroup"]
+        Resource = ["arn:aws:ec2:us-east-1:${var.expected_account_id}:vpc/${aws_vpc.staging.id}"]
+        Condition = { StringEquals = {
+          "aws:RequestedRegion"         = "us-east-1"
+          "aws:ResourceTag/Project"     = "rizz-platform"
+          "aws:ResourceTag/Environment" = "staging"
+          "aws:ResourceTag/ManagedBy"   = "terraform"
+        } }
+      }
+    ])
   }
 }
 resource "aws_iam_role_policy" "ingress" {

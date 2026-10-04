@@ -103,6 +103,24 @@ run "ingress_controller_boundary" {
     error_message = "Security-group rule changes must be limited to this VPC."
   }
   assert {
+    condition = (
+      length([for statement in local.lbc_policy.Statement : statement if contains(statement.Action, "ec2:CreateSecurityGroup")]) == 2 &&
+      toset(flatten([for statement in local.lbc_policy.Statement : statement.Resource if contains(statement.Action, "ec2:CreateSecurityGroup")])) == toset([
+        "arn:aws:ec2:us-east-1:000000000000:security-group/*",
+        "arn:aws:ec2:us-east-1:000000000000:vpc/vpc-00000000000000000",
+      ]) &&
+      alltrue([for statement in local.lbc_policy.Statement : !contains(statement.Action, "ec2:CreateSecurityGroup") || try(statement.Condition.ArnEquals["ec2:Vpc"], null) == null]) &&
+      anytrue([for statement in local.lbc_policy.Statement :
+        contains(statement.Action, "ec2:CreateSecurityGroup") &&
+        contains(statement.Resource, "arn:aws:ec2:us-east-1:000000000000:vpc/vpc-00000000000000000") &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Project"], "") == "rizz-platform" &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Environment"], "") == "staging" &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/ManagedBy"], "") == "terraform"
+      ])
+    )
+    error_message = "Security-group creation must authorize both resource types, with the VPC bound to tagged staging."
+  }
+  assert {
     condition     = alltrue([for statement in jsondecode(aws_iam_role_policy.ingress.policy).Statement : alltrue([for conditions in statement.Condition : length(conditions) > 0]) && length(statement.Action) > 0 && length(statement.Resource) > 0])
     error_message = "Do not render empty IAM conditions, actions or resources."
   }
