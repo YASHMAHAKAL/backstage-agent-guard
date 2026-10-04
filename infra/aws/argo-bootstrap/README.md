@@ -71,14 +71,17 @@ retirement check. This switch is a retirement operation; normal app releases
 do not require a Terraform plan.
 
 Before a live plan, the named operator must have reviewed authority for
-`elasticloadbalancing:DescribeLoadBalancers` and
+`elasticloadbalancing:DescribeLoadBalancers`,
+`elasticloadbalancing:DescribeLoadBalancerAttributes` and
 `elasticloadbalancing:DescribeTags` on `*` in us-east-1,
 `acm:ImportCertificate`, `acm:DescribeCertificate`, `acm:ListTagsForCertificate`,
 `acm:AddTagsToCertificate`, `acm:RemoveTagsFromCertificate` and
 `acm:DeleteCertificate` for this temporary certificate lifecycle, plus
 `ssm:PutParameter`, `ssm:GetParameter`, `ssm:DeleteParameter`,
 `ssm:AddTagsToResource`, `ssm:RemoveTagsFromResource` and
-`ssm:ListTagsForResource` on the exact parameter ARN. Scope new ACM imports to
+`ssm:ListTagsForResource` on the exact parameter ARN, plus
+`ssm:DescribeParameters` on `*` restricted to us-east-1 for provider metadata
+refresh. Scope new ACM imports to
 `arn:aws:acm:us-east-1:ACCOUNT:certificate/*` with request-tag conditions;
 scope later certificate reads and deletion with resource-tag conditions.
 The current operator policy must be checked and updated separately before any

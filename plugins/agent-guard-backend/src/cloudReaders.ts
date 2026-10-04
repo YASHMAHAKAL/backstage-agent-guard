@@ -606,7 +606,7 @@ export class AuthenticatedCloudReaders implements CloudReaders {
         wildcards: false,
         subject: 'never',
       }) !== t.ingress.hostname ||
-      !x509.checkIssued(x509) ||
+      x509.issuer !== x509.subject ||
       !x509.verify(x509.publicKey)
     )
       throw new Error('Certificate validity or fingerprint mismatch');
