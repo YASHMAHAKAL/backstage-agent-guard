@@ -14,7 +14,7 @@ agentGuard:
     # Independent observation: GitHub/Argo Application CR + read-only AWS/EKS/ECR and two
     # ALB readiness GETs. No refresh/sync, inference or mutation is requested.
     # awsProfile additionally needs namespace RBAC/EKS access and ECR manifest
-    # read permissions; see docs/rizz-ai-cloud-observation.md.
+    # read permissions; see docs/operations.md.
     # Checks report unavailable until the dedicated EKS Argo and observer RBAC exist.
     delivery:
       enabled: false
@@ -41,6 +41,8 @@ catalog:
   # Catalog location arrays replace earlier overlays. Keep Kind, org and the
   # Rizz.AI source/resource entries when this example is loaded last.
   locations:
+    - type: file
+      target: ../../catalog-info.yaml
     - type: file
       target: ../../examples/entities.yaml
     - type: file

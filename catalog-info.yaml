@@ -2,12 +2,13 @@ apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: backstage-agent-guard
-  description: An example of a Backstage application.
-  # Example for optional annotations
-  # annotations:
-  #   github.com/project-slug: backstage/backstage
-  #   backstage.io/techdocs-ref: dir:.
+  title: Backstage Agent Guard
+  description: Backstage portal for reviewed Agent Guard and Rizz.AI GitOps workflows.
+  tags: [backstage, gitops, developer-platform]
+  annotations:
+    github.com/project-slug: YASHMAHAKAL/backstage-agent-guard
+    backstage.io/techdocs-ref: dir:.
 spec:
   type: website
-  owner: john@example.com
+  owner: group:default/platform-team
   lifecycle: experimental

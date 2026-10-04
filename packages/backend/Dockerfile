@@ -17,13 +17,16 @@
 
 FROM node:24-trixie-slim
 
-# Install sqlite3 dependencies. You can skip this if you don't use sqlite3 in the image,
-# in which case you should also move better-sqlite3 to "devDependencies" in package.json.
+# Install sqlite3 and local TechDocs generation dependencies. The production
+# image cannot launch a second Docker container for MkDocs.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    apt-get install -y --no-install-recommends libsqlite3-dev && \
+    apt-get install -y --no-install-recommends libsqlite3-dev python3 python3-venv && \
     rm -rf /var/lib/apt/lists/*
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir mkdocs-techdocs-core==1.7.1
+ENV PATH="/opt/venv/bin:$PATH"
 
 # From here on we use the least-privileged `node` user to run the backend.
 USER node
@@ -52,6 +55,8 @@ RUN --mount=type=cache,target=/home/node/.cache/yarn,sharing=locked,uid=1000,gid
 
 # This will include the examples, if you don't need these simply remove this line
 COPY --chown=node:node examples ./examples
+COPY --chown=node:node catalog-info.yaml mkdocs.yml ./
+COPY --chown=node:node docs ./docs
 
 # Then copy the rest of the backend bundle, along with any other files we might want.
 COPY --chown=node:node packages/backend/dist/bundle.tar.gz app-config*.yaml ./
