@@ -105,6 +105,10 @@
   line-height: 1.65;
 }
 
+.ag-hero .ag-kind-back {
+  margin-top: 12px;
+}
+
 .ag-button {
   display: inline-flex;
   align-items: center;

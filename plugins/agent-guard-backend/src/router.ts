@@ -7,11 +7,13 @@ import { proposalDecisionSchema } from './domain';
 import { ProposalService } from './services/ProposalService';
 import { ReleaseCatalog } from './releases';
 import { CloudProposalService } from './services/CloudProposalService';
+import { ProposalOverviewService } from './services/ProposalOverviewService';
 import { TerraformControlService } from './services/TerraformControlService';
 
 export function createRouter(options: {
   httpAuth: HttpAuthService;
   proposals: ProposalService;
+  overview: ProposalOverviewService;
   releases?: ReleaseCatalog;
   cloudProposals?: CloudProposalService;
   terraformControl?: TerraformControlService;
@@ -305,6 +307,14 @@ export function createRouter(options: {
       allow: ['user'],
     });
     res.json({ items: await options.proposals.list(credentials) });
+  });
+
+  router.get('/overview', async (req, res) => {
+    const credentials = await options.httpAuth.credentials(req, {
+      allow: ['user'],
+    });
+    res.set('Cache-Control', 'no-store');
+    res.json(await options.overview.list(credentials));
   });
 
   router.get('/proposals/:id', async (req, res) => {

@@ -7,6 +7,8 @@ The repository supports two demo paths:
 - **Local service demo:** platform-owned Node.js API, FastAPI service, and CronJob templates deploy through a private GitOps repository to Kind.
 - **Rizz.AI lifecycle:** a verified frontend/backend image pair can be proposed for EKS staging, then observed, scaled within bounds, rolled back to a verified deployment, or retired through reviewed GitOps changes. Terraform manages AWS infrastructure separately.
 
+The **Agent Guard** overview at `/agent-guard` lists authorized requests from both paths. Kind and Rizz.AI retain their separate proposal and review pages.
+
 ```text
 Proposal → frozen files and policy → distinct Backstage review → draft GitOps PR
          → human repository review and merge → Argo CD → live observation

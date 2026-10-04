@@ -18,7 +18,11 @@ import './ProposalsPage.css';
 export function ProposalsPage() {
   const { fetch } = useApi(fetchApiRef);
   const [items, setItems] = useState<Proposal[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    typeof window === 'undefined'
+      ? null
+      : new URLSearchParams(window.location.search).get('proposal'),
+  );
   const [filter, setFilter] = useState<'all' | 'review'>('all');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,7 +34,10 @@ export function ProposalsPage() {
   const [delivery, setDelivery] = useState<DeliveryStatus | null>(null);
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(
+    typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('new') === '1',
+  );
   const [submissionNotice, setSubmissionNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -174,16 +181,19 @@ export function ProposalsPage() {
 
   return (
     <>
-      <Header title="Agent Guard" />
+      <Header title="Kind service requests" />
       <Container>
         <div className="ag-page">
           <div className="ag-hero">
             <div>
-              <span className="ag-eyebrow">Platform change control</span>
-              <h1>Service proposals, clearly reviewed.</h1>
+              <span className="ag-eyebrow">Agent Guard · Kind staging</span>
+              <h1>Kind service requests.</h1>
               <p>
                 Compare declared intent with the exact change, approve a frozen
                 snapshot, and follow delivery from Scaffolder to Argo CD.
+              </p>
+              <p className="ag-kind-back">
+                <a href="/agent-guard">← All governed requests</a>
               </p>
             </div>
             <div className="ag-hero__actions">

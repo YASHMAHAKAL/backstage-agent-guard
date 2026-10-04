@@ -12,6 +12,7 @@ import { JevClient } from './jev';
 import { createReleaseCatalog } from './releaseSource';
 import { createRouter } from './router';
 import { ProposalService } from './services/ProposalService';
+import { ProposalOverviewService } from './services/ProposalOverviewService';
 import {
   CloudProposalService,
   CloudServiceConfiguration,
@@ -237,6 +238,15 @@ export function createAgentGuardPlugin(
             createRouter({
               httpAuth: deps.httpAuth,
               proposals,
+              overview: new ProposalOverviewService({
+                auth: deps.auth,
+                userInfo: deps.userInfo,
+                catalog: deps.catalog,
+                database: deps.database,
+                logger: deps.logger,
+                proposals,
+                cloudProposals,
+              }),
               releases: options.cloud?.releases ?? releases,
               cloudProposals,
               terraformControl,
