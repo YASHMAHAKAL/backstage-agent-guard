@@ -147,7 +147,7 @@ export function validateSmokeCertificate(
   const cert = new X509Certificate(pem);
   if (
     cert.ca ||
-    !cert.checkIssued(cert) ||
+    cert.issuer !== cert.subject ||
     !cert.verify(cert.publicKey) ||
     Date.parse(cert.validFrom) > now ||
     Date.parse(cert.validTo) <= now ||

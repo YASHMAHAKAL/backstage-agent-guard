@@ -30,6 +30,11 @@ export function temporaryCertificate(hostname: string, ca = false) {
       `subjectAltName=DNS:${hostname}`,
       '-addext',
       `basicConstraints=critical,CA:${ca ? 'TRUE' : 'FALSE'}`,
+      '-addext',
+      ca
+        ? 'keyUsage=critical,keyCertSign,cRLSign'
+        : 'keyUsage=critical,digitalSignature,keyEncipherment',
+      ...(ca ? [] : ['-addext', 'extendedKeyUsage=serverAuth']),
       '-keyout',
       keyPath,
       '-out',

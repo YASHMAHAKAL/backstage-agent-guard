@@ -442,10 +442,12 @@ export class CloudProposalService {
           };
         })(),
         new Promise<never>((_, reject) => {
+          // The initial check makes sequential, separately bounded AWS CLI
+          // reads for EKS, ACM, ALB, and security groups after GitOps reads.
           timer = setTimeout(() => {
             controller.abort();
             reject(new Error('Cloud evidence timeout'));
-          }, 20000);
+          }, 60000);
         }),
       ]);
     } catch {
