@@ -1500,25 +1500,30 @@
 .ag-cloud-page .ag-file__body > pre {
   margin: 0;
 }
-.ag-cloud-delivery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 16px;
-  margin: 20px 0;
+.ag-cloud-delivery .ag-section-heading {
+  align-items: flex-start;
 }
-
-.ag-cloud-page progress {
-  width: 100%;
-  height: 12px;
-  margin-top: 20px;
-  accent-color: #26b86b;
+.ag-cloud-delivery .ag-delivery__facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-
-.ag-cloud-delivery-grid > div {
-  border: 1px solid var(--ag-border, #727272);
-  border-radius: 12px;
-  padding: 16px;
-  overflow-wrap: anywhere;
+.ag-cloud-delivery__evidence-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+  font-size: 12px;
+}
+.ag-cloud-delivery__footnote {
+  margin: 10px 0 0;
+  color: var(--ag-muted);
+  font-size: 10px;
+}
+.ag-cloud-retirement-handoff .ag-facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ag-cloud-retirement-handoff {
+  padding: 22px 24px;
 }
 @media (max-width: 900px) {
   .ag-cloud-create .ag-create__templates {
@@ -1527,6 +1532,13 @@
 }
 @media (max-width: 620px) {
   .ag-cloud-create .ag-create__templates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ag-cloud-delivery .ag-section-heading {
+    flex-direction: column;
+  }
+  .ag-cloud-delivery .ag-delivery__facts,
+  .ag-cloud-retirement-handoff .ag-facts {
     grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -1912,52 +1912,84 @@ export function CloudDeploymentsPage() {
                         )}
                       </aside>
                     </div>
-                    <section className="ag-card">
-                      <span className="ag-eyebrow">
-                        Scaffolder handoff only
-                      </span>
-                      <h2>Delivery handoff</h2>
-                      <p>
-                        Status:{' '}
-                        {humanize(selected.execution?.state ?? 'not_started')}
-                        {selected.execution?.errorCode
-                          ? ` · ${humanize(selected.execution.errorCode)}`
-                          : ''}
-                      </p>
-                      {selected.execution?.taskId && (
-                        <p>
-                          Private task: {selected.execution.taskId} (logs
-                          restricted to the backend service)
-                        </p>
-                      )}
-                      {selected.execution?.prUrl && (
-                        <p>
-                          <a
-                            href={selected.execution.prUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            Open draft GitOps PR
-                          </a>
-                        </p>
-                      )}
-                      <details className="ag-disclosure">
-                        <summary>Audit trail</summary>
-                        <pre>{JSON.stringify(selected.audit, null, 2)}</pre>
-                      </details>
-                    </section>
                     {!isRetirement(envelope.kind) && (
                       <CloudDeliveryPanel
                         key={selected.id}
                         proposalId={selected.id}
+                        handoff={selected}
                       />
                     )}
                     {isRetirement(envelope.kind) && (
-                      <CloudRetirementPanel
-                        key={selected.id}
-                        proposalId={selected.id}
-                      />
+                      <>
+                        <section className="ag-card ag-cloud-retirement-handoff">
+                          <div className="ag-section-heading">
+                            <div>
+                              <span className="ag-eyebrow">
+                                Scaffolder handoff
+                              </span>
+                              <h3>Retirement delivery</h3>
+                            </div>
+                          </div>
+                          <dl className="ag-facts">
+                            <div>
+                              <dt>Status</dt>
+                              <dd>
+                                {humanize(
+                                  selected.execution?.state ?? 'not_started',
+                                )}
+                              </dd>
+                            </div>
+                            {selected.execution?.taskId && (
+                              <div>
+                                <dt>Private task</dt>
+                                <dd>
+                                  <code>{selected.execution.taskId}</code>
+                                </dd>
+                              </div>
+                            )}
+                            {selected.execution?.errorCode && (
+                              <div>
+                                <dt>Error</dt>
+                                <dd>
+                                  {humanize(selected.execution.errorCode)}
+                                </dd>
+                              </div>
+                            )}
+                            {selected.execution?.prUrl && (
+                              <div>
+                                <dt>GitOps PR</dt>
+                                <dd>
+                                  <a
+                                    href={selected.execution.prUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    Open draft PR
+                                  </a>
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
+                        </section>
+                        <CloudRetirementPanel
+                          key={selected.id}
+                          proposalId={selected.id}
+                        />
+                      </>
                     )}
+                    <details className="ag-card ag-audit">
+                      <summary>Audit history</summary>
+                      <ol>
+                        {selected.audit.map((event, index) => (
+                          <li key={`${event.event}-${event.at}-${index}`}>
+                            <strong>{humanize(event.event)}</strong> by{' '}
+                            {event.actor} at{' '}
+                            {new Date(event.at).toLocaleString()}
+                            <code>{event.digest}</code>
+                          </li>
+                        ))}
+                      </ol>
+                    </details>
                   </div>
                 ) : (
                   <div className="ag-card ag-empty-detail">

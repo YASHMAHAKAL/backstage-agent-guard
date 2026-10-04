@@ -55,7 +55,7 @@ export function CloudRetirementPanel({ proposalId }: { proposalId: string }) {
     return () => controller.abort();
   }, [fetch, proposalId, refresh]);
   return (
-    <section className="ag-card">
+    <section className="ag-card ag-delivery">
       <div className="ag-section-heading">
         <div>
           <span className="ag-eyebrow">Read-only observation</span>

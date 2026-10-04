@@ -51,7 +51,13 @@ type Proposal = {
     };
   };
   viewerPermissions?: { canReview: boolean };
-  execution?: { state: string; prUrl?: string };
+  decision?: { decision: string };
+  execution?: {
+    state: string;
+    taskId?: string;
+    prUrl?: string;
+    errorCode?: string;
+  };
 };
 type VerifiedDeployment = {
   proposalId: string;
@@ -554,9 +560,10 @@ export function RizzControlCenter() {
           deploys.
         </p>
         {selectedProposal &&
-          (selectedRecord?.snapshot.envelope.kind ===
+          selectedRecord &&
+          (selectedRecord.snapshot.envelope.kind ===
             'rizz_cloud_retire_ingress' ||
-          selectedRecord?.snapshot.envelope.kind === 'rizz_cloud_retire_app' ? (
+          selectedRecord.snapshot.envelope.kind === 'rizz_cloud_retire_app' ? (
             <CloudRetirementPanel
               key={selectedProposal}
               proposalId={selectedProposal}
@@ -565,6 +572,7 @@ export function RizzControlCenter() {
             <CloudDeliveryPanel
               key={selectedProposal}
               proposalId={selectedProposal}
+              handoff={selectedRecord}
             />
           ))}
       </section>

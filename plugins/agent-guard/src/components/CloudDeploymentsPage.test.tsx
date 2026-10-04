@@ -545,6 +545,11 @@ it('shows one request form and formats review manifests without changing approve
   expect(
     screen.queryByRole('button', { name: 'Submit cloud proposal' }),
   ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { name: 'Cloud delivery journey' }),
+  ).toBeInTheDocument();
+  expect(screen.getByText('Scaffolder handoff')).toBeInTheDocument();
+  expect(screen.getByText('Audit history')).toBeInTheDocument();
   const file = screen.getByText(
     'clusters/eks-staging/apps/rizz-ai/frontend-deployment.yaml',
   );
