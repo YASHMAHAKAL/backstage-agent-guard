@@ -1,6 +1,7 @@
 import { fetchApiRef, useApi } from '@backstage/frontend-plugin-api';
 import { Container, Header } from '@backstage/ui';
 import { FormEvent, useEffect, useRef, useState } from 'react';
+import { stringify as stringifyYaml } from 'yaml';
 import { JevPanel } from './ProposalsPage/JevPanel';
 import { SemanticResult, humanize, statusTone } from './ProposalsPage/model';
 import './ProposalsPage/ProposalsPage.css';
@@ -145,6 +146,62 @@ type CloudProposal = {
   audit: Array<{ event: string; actor: string; at: string; digest: string }>;
 };
 const endpoint = 'plugin://agent-guard/rizz';
+type Workflow = 'release' | 'runtime' | 'rollback' | 'retirement';
+const workflowLabels: Record<Workflow, string> = {
+  release: 'Paired release',
+  runtime: 'Change replicas',
+  rollback: 'Rollback',
+  retirement: 'Retire application',
+};
+
+function manifestPreview(content: string): { format: string; text: string } {
+  try {
+    const document = JSON.parse(content);
+    if (document && typeof document === 'object' && !Array.isArray(document)) {
+      return {
+        format: 'YAML',
+        text: stringifyYaml(document, { lineWidth: 0 }),
+      };
+    }
+  } catch {
+    // Existing GitOps files may already be YAML. Show those exact bytes below.
+  }
+  return { format: 'manifest', text: content };
+}
+
+function ManifestFilePreview({
+  file,
+}: {
+  file: CloudProposal['snapshot']['files'][number];
+}) {
+  const preview = manifestPreview(file.content);
+  return (
+    <details className="ag-file">
+      <summary>
+        <span aria-hidden="true">▸</span>
+        <span>{file.path}</span>
+        <small>View {preview.format}</small>
+      </summary>
+      <div className="ag-file__body">
+        <p className="ag-muted">
+          {preview.format === 'YAML'
+            ? 'Formatted YAML for reading. The exact approved bytes are available below.'
+            : 'Exact approved manifest bytes.'}
+        </p>
+        <pre>{preview.text}</pre>
+        {preview.format === 'YAML' && (
+          <details className="ag-disclosure">
+            <summary>Exact approved bytes</summary>
+            <pre>{file.content}</pre>
+          </details>
+        )}
+        <span>SHA-256 of exact approved bytes</span>
+        <code>{file.sha256}</code>
+      </div>
+    </details>
+  );
+}
+
 function proposalLabel(proposal: CloudProposal) {
   const { envelope } = proposal.snapshot;
   if (envelope.kind === 'rizz_cloud_retire_ingress')
@@ -183,6 +240,7 @@ export function CloudDeploymentsPage() {
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
   const [queue, setQueue] = useState<CloudProposal[]>([]);
   const [selected, setSelected] = useState<CloudProposal | null>(null);
+  const [activeWorkflow, setActiveWorkflow] = useState<Workflow>('release');
   const selectedId = useRef(
     typeof window === 'undefined'
       ? ''
@@ -647,9 +705,9 @@ export function CloudDeploymentsPage() {
           <span className="ag-eyebrow">Cloud golden path · EKS staging</span>
           <h1>Governed application lifecycle.</h1>
           <p>
-            Propose a paired release, bounded replica change, verified rollback
-            or staged retirement → Jev → human review → draft GitOps PR → human
-            merge → Argo CD. Terraform is a separate platform workflow.
+            Choose an application change, review its exact GitOps files, and
+            request a distinct human decision. Approved changes open a draft PR;
+            a human merge lets Argo CD deploy them.
           </p>
           <div className="ag-create__actions">
             <a href="/rizz-releases">Browse release evidence</a>
@@ -687,11 +745,35 @@ export function CloudDeploymentsPage() {
         </section>
         {!loading && capability?.state === 'configured' && (
           <>
+            {capability.canSubmit && !selected && (
+              <section className="ag-card ag-workflow-picker">
+                <span className="ag-eyebrow">New application request</span>
+                <h2>What would you like to change?</h2>
+                <div
+                  className="ag-create__actions"
+                  role="group"
+                  aria-label="Request type"
+                >
+                  {(Object.keys(workflowLabels) as Workflow[]).map(workflow => (
+                    <button
+                      className="ag-button"
+                      type="button"
+                      key={workflow}
+                      aria-pressed={activeWorkflow === workflow}
+                      onClick={() => setActiveWorkflow(workflow)}
+                    >
+                      {workflowLabels[workflow]}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
             {capability.canSubmit ? (
               <section
                 id="paired-release-form"
                 className="ag-card ag-create"
                 aria-labelledby="rizz-create-title"
+                hidden={Boolean(selected) || activeWorkflow !== 'release'}
               >
                 <h2 id="rizz-create-title">Propose a paired release</h2>
                 <p>
@@ -800,6 +882,7 @@ export function CloudDeploymentsPage() {
                 id="runtime-change-form"
                 className="ag-card ag-create"
                 aria-labelledby="rizz-runtime-title"
+                hidden={Boolean(selected) || activeWorkflow !== 'runtime'}
               >
                 <span className="ag-eyebrow">
                   Existing GitOps configuration · bounded change
@@ -912,6 +995,7 @@ export function CloudDeploymentsPage() {
                 id="retirement-form"
                 className="ag-card ag-create"
                 aria-labelledby="rizz-retirement-title"
+                hidden={Boolean(selected) || activeWorkflow !== 'retirement'}
               >
                 <span className="ag-eyebrow">
                   Destructive application lifecycle
@@ -1006,7 +1090,10 @@ export function CloudDeploymentsPage() {
               </section>
             )}
             {capability.canSubmit && !capability.canRetire && (
-              <section className="ag-card">
+              <section
+                className="ag-card"
+                hidden={Boolean(selected) || activeWorkflow !== 'retirement'}
+              >
                 <h2>Retirement observation unavailable</h2>
                 <p>
                   Staged retirement becomes available after the trusted Argo
@@ -1019,6 +1106,7 @@ export function CloudDeploymentsPage() {
                 id="rollback-form"
                 className="ag-card ag-create"
                 aria-labelledby="rizz-rollback-title"
+                hidden={Boolean(selected) || activeWorkflow !== 'rollback'}
               >
                 <span className="ag-eyebrow">Verified recovery</span>
                 <h2 id="rizz-rollback-title">Propose a rollback</h2>
@@ -1125,7 +1213,30 @@ export function CloudDeploymentsPage() {
               className="ag-card"
               aria-labelledby="rizz-queue-title"
             >
-              <h2 id="rizz-queue-title">Cloud review queue</h2>
+              <div className="ag-section-heading">
+                <h2 id="rizz-queue-title">Cloud review queue</h2>
+                {selected && capability.canSubmit && (
+                  <button
+                    className="ag-button"
+                    type="button"
+                    onClick={() => {
+                      selectedId.current = '';
+                      setSelected(null);
+                      setReviewConfirmed(false);
+                      const url = new URL(window.location.href);
+                      url.searchParams.delete('proposal');
+                      url.hash = '';
+                      window.history.replaceState(
+                        {},
+                        '',
+                        `${url.pathname}${url.search}`,
+                      );
+                    }}
+                  >
+                    Start another request
+                  </button>
+                )}
+              </div>
               {!queue.length && (
                 <p>No cloud requests visible to your account.</p>
               )}
@@ -1320,44 +1431,22 @@ export function CloudDeploymentsPage() {
               </details>
             </section>
             <JevPanel semantic={selected.semantic} />
-            <section className="ag-card">
-              <h2>Frozen execution snapshot</h2>
-              <p>
-                Approval digest: <code>{selected.snapshot.digest}</code>
+            <section className="ag-card" aria-labelledby="rizz-files-title">
+              <div className="ag-section-heading">
+                <div>
+                  <span className="ag-eyebrow">Frozen execution snapshot</span>
+                  <h2 id="rizz-files-title">Exact GitOps change</h2>
+                </div>
+                <span className="ag-pill ag-pill--neutral">
+                  {selected.snapshot.files.length} files
+                </span>
+              </div>
+              <p className="ag-muted">
+                Review the proposed files below. They are based on GitOps
+                revision{' '}
+                <code>{envelope.gitopsBase.revision.slice(0, 12)}</code>, not a
+                live cluster diff. A changed base needs fresh review.
               </p>
-              <p>
-                Reviewed base: <code>{envelope.gitopsBase.revision}</code>
-              </p>
-              <p>Policy: {envelope.policyVersion}</p>
-              <p>
-                Eligible reviewer groups:{' '}
-                {(envelope.reviewerGroups ?? [envelope.target.owner]).join(
-                  ' or ',
-                )}
-                . The reviewer must be a different authenticated user.
-              </p>
-              {envelope.template && (
-                <p>
-                  Recipe digest: <code>{envelope.template.digest}</code>
-                </p>
-              )}
-              <details className="ag-disclosure">
-                <summary>Reviewed existing file hashes</summary>
-                <pre>{JSON.stringify(envelope.gitopsBase.files, null, 2)}</pre>
-              </details>
-              <p>
-                These are the exact proposed file bytes, not a live-cluster
-                diff. A changed base requires fresh review.
-              </p>
-              {selected.snapshot.files.map(file => (
-                <details className="ag-disclosure" key={file.path}>
-                  <summary>{file.path}</summary>
-                  <p>
-                    <code>{file.sha256}</code>
-                  </p>
-                  <pre>{file.content}</pre>
-                </details>
-              ))}
               {selected.snapshot.deletePaths?.length ? (
                 <div className="ag-notice ag-notice--warning">
                   <strong>Exact paths to delete</strong>
@@ -1370,6 +1459,41 @@ export function CloudDeploymentsPage() {
                   </ul>
                 </div>
               ) : null}
+              <div className="ag-files">
+                {selected.snapshot.files.map(file => (
+                  <ManifestFilePreview key={file.path} file={file} />
+                ))}
+              </div>
+              <details className="ag-disclosure">
+                <summary>Approval metadata and reviewed base hashes</summary>
+                <div className="ag-disclosure__body">
+                  <p>
+                    Approval digest: <code>{selected.snapshot.digest}</code>
+                  </p>
+                  <p>
+                    Full GitOps base:{' '}
+                    <code>{envelope.gitopsBase.revision}</code>
+                  </p>
+                  <p>Policy: {envelope.policyVersion}</p>
+                  <p>
+                    Eligible reviewer groups:{' '}
+                    {(envelope.reviewerGroups ?? [envelope.target.owner]).join(
+                      ' or ',
+                    )}
+                  </p>
+                  {envelope.template && (
+                    <p>
+                      Recipe digest: <code>{envelope.template.digest}</code>
+                    </p>
+                  )}
+                  <details className="ag-disclosure">
+                    <summary>Existing file hashes at the reviewed base</summary>
+                    <pre>
+                      {JSON.stringify(envelope.gitopsBase.files, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              </details>
             </section>
             <section className="ag-card">
               <h2>Human decision</h2>

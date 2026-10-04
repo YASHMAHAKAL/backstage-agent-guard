@@ -1435,6 +1435,9 @@
   margin: 0;
   max-width: none;
 }
+.ag-cloud-page > .ag-card[hidden] {
+  display: none;
+}
 .ag-cloud-page pre {
   max-height: 440px;
   overflow: auto;
@@ -1445,6 +1448,24 @@
 }
 .ag-cloud-page code {
   overflow-wrap: anywhere;
+}
+.ag-workflow-picker .ag-create__actions {
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.ag-workflow-picker .ag-button[aria-pressed='true'] {
+  border-color: var(--ag-accent);
+  background: color-mix(in srgb, var(--ag-accent) 8%, var(--ag-surface));
+}
+.ag-cloud-page .ag-file {
+  border: 1px solid var(--ag-line);
+  border-radius: 10px;
+}
+.ag-cloud-page .ag-file__body > .ag-muted {
+  margin: 0;
+}
+.ag-cloud-page .ag-file__body > pre {
+  margin: 0;
 }
 .ag-cloud-queue .ag-button[aria-pressed='true'] {
   border-color: var(--ag-accent);

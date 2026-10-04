@@ -303,6 +303,7 @@ it('previews and submits a bounded runtime change without requesting Scaffolder'
   });
   render(<CloudDeploymentsPage />);
   await ready();
+  fireEvent.click(screen.getByRole('button', { name: 'Change replicas' }));
   fireEvent.change(screen.getByLabelText('Runtime change intent'), {
     target: { value: 'Increase only the Rizz.AI backend to two replicas.' },
   });
@@ -405,6 +406,7 @@ it('previews a recorded healthy release before submitting a rollback proposal', 
   });
   render(<CloudDeploymentsPage />);
   await ready();
+  fireEvent.click(screen.getByRole('button', { name: 'Rollback' }));
   expect(
     screen.queryByRole('option', { name: /2026-09-28T11:00/ }),
   ).not.toBeInTheDocument();
@@ -511,6 +513,42 @@ it('distinct reviewer explicitly confirms the frozen change and posts the exact 
     digest: items[0].snapshot.digest,
   });
   expect(screen.getByText(/Deployment not verified/)).toBeInTheDocument();
+});
+it('shows one request form and formats review manifests without changing approved bytes', async () => {
+  items = [proposal(true)];
+  render(<CloudDeploymentsPage />);
+  await ready();
+  expect(
+    screen.getByRole('button', { name: 'Submit cloud proposal' }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: 'Preview exact change' }),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: /pending approval/i }));
+  expect(
+    screen.queryByRole('button', { name: 'Submit cloud proposal' }),
+  ).not.toBeInTheDocument();
+  const file = screen.getByText(
+    'clusters/eks-staging/apps/rizz-ai/frontend-deployment.yaml',
+  );
+  fireEvent.click(file);
+  expect(screen.getByText('kind: Deployment')).toBeInTheDocument();
+  expect(screen.getByText('{"kind":"Deployment"}')).toBeInTheDocument();
+  expect(screen.getByText(/Formatted YAML for reading/)).toBeInTheDocument();
+  expect(screen.getByText(`sha256:${'d'.repeat(64)}`)).toBeInTheDocument();
+  expect(
+    screen
+      .getByText('Approval metadata and reviewed base hashes')
+      .closest('details'),
+  ).not.toHaveAttribute('open');
+
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Start another request' }),
+  );
+  expect(
+    screen.getByRole('button', { name: 'Submit cloud proposal' }),
+  ).toBeInTheDocument();
 });
 it('unauthorized/requester views have no approval buttons; refresh failure removes stale evidence', async () => {
   items = [proposal(false)];
