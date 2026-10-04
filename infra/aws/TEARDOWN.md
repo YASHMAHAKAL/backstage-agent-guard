@@ -1,34 +1,79 @@
-# Short-demo teardown — not executed or authorized
+# Rizz.AI AWS demo teardown and recovery
 
-These source changes created no AWS resources. The registry and state bucket
-retained from the earlier demo remain separate. User intent is to begin
-teardown within minutes of successful verification; deletion can take longer
-and charges continue until corresponding resources are removed.
+This runbook covers the short-lived EKS staging demo in `us-east-1`. Keep the
+local Kind demo separate. The demo constraints are a US$5 maximum budget, a
+four-hour checkpoint from first resource creation, and teardown starting
+shortly after successful verification. A budget alert does not stop charges;
+deletion may continue beyond the checkpoint.
 
-## Evidence and scope
+## Latest demo: 2026-10-04
 
-Capture both rollouts, approved image pair/source commit, merged revision, Argo sync and bounded functional test. Sanitize screenshots; never publish credentials, private plan/state or account metadata. Confirm intended non-root profile/region/cluster/backend/state key against inventory, not similar names or current kubectl context. Preserve Kind.
+The operator reports that teardown completed. The application Ingress and
+Argo CD Application were removed, followed by the `argo-bootstrap`, `argocd`,
+and staging Terraform roots. The staging teardown initially stopped after EKS
+deletion because `rizz-platform` lacked `ec2:DisassociateAddress` for the NAT
+EIP. Completion was reported after that failure; this document does not by
+itself verify that every AWS resource is absent.
 
-Review exact delete/retain scope: staging network/EKS/controller ALB, runtime secret, registry/images, budget, shared OIDC and protected state bucket. Intent to finish the demo is not authorization to destroy unspecified resources.
+The `rizz-staging` namespace also stalled in `Terminating`: External Secrets
+validation webhooks still referred to a Service that had been removed. After
+the stale webhook configurations were cleared, `ExternalSecret/rizz-runtime`
+still held the `externalsecrets.external-secrets.io/externalsecret-cleanup`
+finalizer. The operator cleared that finalizer on the orphaned resource so
+namespace deletion could finish. This was recovery from a partially removed
+controller, not a routine teardown step. The Argo CD Helm uninstall also
+reported that its CRDs were retained by chart resource policy; those cluster
+CRDs cease to exist when EKS is deleted.
 
-## Remove controller resources first
+The intended retained scope is the ECR repositories/images, protected Terraform
+state bucket, runtime Secrets Manager secret, and staging account guard. The
+runtime secret was deliberately excluded from the staging deletion. Confirm
+its actual AWS status and Terraform state before relying on that retention;
+the latest teardown report alone is not an inventory check.
 
-Freeze new releases and coordinate cloud-only GitOps deletion so Argo cannot recreate workloads. Review/merge removal of the app Ingress/resources and perform the documented Argo sync with pruning while Argo and controllers still operate. Application deletion needs a reviewed cascading policy; deleting without cascade can orphan resources. Never indiscriminately delete the platform parent Application. The Terraform-owned fixed-response bootstrap Ingress still keeps the ALB alive at this point; remove it, its temporary ACM certificate and its public SSM metadata through a separately reviewed `argo-bootstrap` plan setting `enable_alb_bootstrap=false` while the controller is running.
+## Prepare a future teardown
 
-Verify Ingress plus actual AWS ALB/listeners/target groups/controller-owned security groups are gone. Inspect controller logs/finalizers/ENIs on failures. Keep controller IAM alive until cleanup finishes; do not force-remove finalizers or randomly delete ENIs. Failed ALB cleanup blocks normal cluster teardown and does not stop its charges.
+Record the approved image pair, source commit, merged GitOps revision, Argo
+sync/health, workload readiness, and bounded functional result. Keep private
+plan/state, credentials, and secret values out of screenshots and committed
+files. Confirm the exact AWS account, `rizz-platform` profile, region, cluster,
+Terraform backend, and state key rather than trusting a current `kubectl`
+context. Preserve the separate Kind cluster.
 
-Handle namespace/ExternalSecret cleanup; deleting Kubernetes Secret does not delete AWS secret. Record retention decisions without reading/exposing values.
+Freeze new cloud releases. Decide explicitly whether to delete or retain the
+runtime secret, ECR images/repositories, budget, shared OIDC resources, and
+state bucket. Do not include bootstrap or registry roots merely to resolve a
+staging dependency. Preserve the state bucket while dependent roots need it.
 
-For installations owned by the new `infra/aws/argocd` Terraform root, remove
-Applications/controllers through `argo-bootstrap` after their AWS cleanup, then destroy the Argo root
-while EKS API access and the worker are still available. Destroy the staging
-foundation afterward. Removing EKS first leaves the Helm provider unable to
-uninstall its tracked release. Direct operator Helm and Terraform must not both
-own the same Argo installation.
+## Delete in dependency order
 
-## Review exact destroy plan
+1. Remove the Rizz.AI application Ingress while the AWS Load Balancer
+   Controller and EKS API still work. Stop Argo CD from recreating it through a
+   reviewed GitOps change or a reviewed Application removal. Check that the
+   controller-owned ALB, listeners, target groups, security groups, and ENIs
+   disappear. The Terraform-owned bootstrap Ingress can also keep the demo ALB
+   alive; remove it while the controller is still running.
+2. Remove the `argo-bootstrap` root's Argo Projects/Applications, repository
+   connection, bootstrap Ingress, temporary ACM certificate, and public SSM
+   target metadata. Let External Secrets clean up its custom resources before
+   its webhook/controller is removed. Confirm namespaces finish terminating.
+3. Destroy the `argocd` root while EKS access and workers still exist, so Helm
+   can uninstall its release. Argo CD chart CRDs may be retained until the EKS
+   cluster is deleted.
+4. Destroy the staging foundation only after controller-owned AWS resources
+   are gone. Keep the controller's IAM authority until its cleanup completes.
+   The staging root owns the EKS cluster, network, NAT/EIP, IAM, and runtime
+   secret metadata. A full destroy schedules that secret for deletion with a
+   seven-day recovery window; it does **not** retain it automatically. If the
+   secret must remain, review an explicit retention-safe scope and confirm the
+   resulting state tracks it. Do not remove it from state merely to hide a
+   failed deletion.
 
-After verifying this root's backend/private inputs and receiving plan authority, future commands are:
+For each root, review a fresh exact destroy plan, its account/region, resource
+addresses, and retained scope before applying it. A partial apply changes
+state: inspect the result and create a new plan for remaining work. Keep saved
+plans local and private. For example, a full staging destroy can be inspected
+with:
 
 ```bash
 terraform -chdir=infra/aws/environments/staging plan -destroy \
@@ -36,20 +81,47 @@ terraform -chdir=infra/aws/environments/staging plan -destroy \
 terraform -chdir=infra/aws/environments/staging show teardown.tfplan
 ```
 
-Plans/output can contain private metadata: keep local/ignored. Review all deletions/account/region; no routine `-target`, lock disabling, active-writer force-unlock or state removal. Do not destroy bootstrap/registry to resolve a staging dependency.
+That full plan includes the runtime secret; do not apply it if retention is
+intended. The project's governed Terraform control requires approval and
+execution of the exact saved plan. A manual interactive destroy also requires
+review of its proposed changes, but is not the governed runner workflow. Do
+not use routine `-target`, lock disabling, force-unlock of an active writer, or
+`-auto-approve`.
+Targeting is a recovery tool for a reviewed partial teardown, as it was when
+retaining the runtime secret in this demo.
 
-This root schedules runtime secret deletion with seven-day recovery; it does **not** retain the secret on destroy. If retention is required, stop and review a retention-safe ownership change first. Scheduled deletion prevents immediate name reuse. Obtain explicit authorization for the saved destroy plan; changed state/configuration/plan requires renewed review. Apply only that approved plan, with private backup/state recovery available. No auto-approve or automatic teardown script is supplied.
+## Recover a stalled deletion
 
-## Verify residual resources/cost
+- If a namespace remains `Terminating`, inspect its conditions and remaining
+  resources. A missing External Secrets webhook Service can block deletion of
+  `SecretStore` and `ExternalSecret` objects. Prefer restoring the webhook long
+  enough for normal cleanup. If the controller is already removed, inspect the
+  exact stale webhook configurations and custom resources before clearing
+  them. Remove a finalizer only from a confirmed orphan after checking its
+  cleanup responsibility and the AWS secret retention decision. Never strip
+  namespace finalizers blindly.
+- If staging destroy reports an AWS `AccessDenied`, stop and update only the
+  required operator policy. For the observed NAT EIP failure, the missing
+  action was `ec2:DisassociateAddress`. Recheck state and create a fresh plan;
+  an EKS deletion success message does not imply the EIP or NAT is gone.
+- If an ALB, ENI, target group, or finalizer remains, inspect the controller
+  and AWS resource ownership before removing anything manually. A Terraform
+  timeout, interrupted command, or released state lock does not prove cleanup.
 
-Check exact inventoried AWS resources, not just Terraform's completion:
+## Verify the residual inventory
 
-- Cluster and workers/ASG gone; zero nodes alone still incurs EKS charges.
-- NAT deleted/EIP released; controller ALBs/target groups/ENIs gone.
-- Worker volumes deleted; inspect retained EBS volumes/snapshots/IPs separately.
-- VPC/subnets/routes/security groups/endpoints removed when in approved scope; reconcile unexpected ownership, never wildcard-delete.
-- Logs/Pod Identity/IAM removed according to plan; controller role cleanup separately tracked.
-- Secret scheduled deletion/retention recorded, not claimed as immediate permanent deletion.
-- ECR images/state versions/budget/shared OIDC explicitly retained or separately reviewed. ECR has no force-delete; tagged releases need an explicit decision.
+Record a timestamped AWS inventory as **absent**, **retained**, **residual**, or
+**unavailable** for each item:
 
-Denied/timeouts mean unknown, not proof of deletion; billing can lag. Record UTC start/end and removed/retained categories/remaining charges. Recheck unexpected billable resources through approved scoped actions. Keep state bucket recovery; never empty/delete it just to finish the demo.
+- EKS cluster, node groups/ASG, and worker volumes.
+- ALB, listeners, target groups, controller security groups, and ENIs.
+- NAT gateway, EIP/public IPs, VPC, subnets, routes, and network security groups.
+- CloudWatch logs, Pod Identity associations, and staging IAM roles/policies.
+- Runtime secret status and staging Terraform state entries; do not read or
+  expose the secret value.
+- Deliberately retained ECR images/repositories, budget, shared OIDC resources,
+  and versioned state bucket.
+
+Do not infer zero cost from an empty Terraform state or a successful destroy
+message. AWS billing may lag, and an unavailable inventory is not proof that a
+resource is absent. Keep teardown evidence outside the deleted cluster.

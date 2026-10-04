@@ -69,6 +69,8 @@ e2e-test-report/
 # Local Backstage demo database
 var/*.sqlite
 var/*.sqlite-*
+# Unpublished operator handoffs preserved locally, outside TechDocs.
+/var/developer-notes/
 
 # Terraform working data, credentials/identity inputs and saved plans.
 # Commit provider lockfiles and placeholder examples, never state or plans.

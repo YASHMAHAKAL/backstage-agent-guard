@@ -11,6 +11,8 @@ integrations:
 catalog:
   locations:
     - type: file
+      target: ../../catalog-info.yaml
+    - type: file
       target: ../../examples/entities.yaml
     - type: file
       target: ../../catalog/templates/nodejs-api/template.yaml

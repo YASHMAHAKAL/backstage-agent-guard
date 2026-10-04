@@ -1,0 +1,10 @@
+site_name: Backstage Agent Guard
+site_description: Governed service delivery and Rizz.AI lifecycle portal
+nav:
+  - Overview: index.md
+  - Use the portal: use-the-portal.md
+  - Services and ownership: services.md
+  - Delivery workflows: delivery.md
+  - Operations and evidence: operations.md
+plugins:
+  - techdocs-core

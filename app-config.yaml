@@ -198,6 +198,10 @@ catalog:
   rules:
     - allow: [Component, System, API, Resource, Location]
   locations:
+    # This repository's TechDocs entity. Keep it in every catalog overlay.
+    - type: file
+      target: ../../catalog-info.yaml
+
     # Local example data, file locations are relative to the backend process, typically `packages/backend`
     - type: file
       target: ../../examples/entities.yaml
