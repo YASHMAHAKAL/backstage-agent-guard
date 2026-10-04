@@ -28,7 +28,9 @@ export const page = PageBlueprint.make({
     ),
     routeRef: rootRouteRef,
     loader: () =>
-      import('./components/ProposalsPage').then(m => <m.ProposalsPage />),
+      import('./components/RequestOverviewPage').then(m => (
+        <m.RequestOverviewPage />
+      )),
   },
 });
 
@@ -36,6 +38,28 @@ export const agentGuardPlugin = createFrontendPlugin({
   pluginId: 'agent-guard',
   extensions: [
     page,
+    PageBlueprint.make({
+      name: 'kind-services',
+      params: {
+        path: '/agent-guard/kind',
+        title: 'Kind service requests',
+        icon: (
+          <svg
+            width="1em"
+            height="1em"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path d="m12 2 9 5-9 5-9-5 9-5Zm-9 5v10l9 5 9-5V7M12 12v10" />
+          </svg>
+        ),
+        loader: () =>
+          import('./components/ProposalsPage').then(m => <m.ProposalsPage />),
+      },
+    }),
     EntityContentBlueprint.make({
       name: 'rizz-control-center',
       params: {

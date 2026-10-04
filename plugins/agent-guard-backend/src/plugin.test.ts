@@ -154,6 +154,28 @@ async function start(
 }
 
 describe('Agent Guard backend', () => {
+  it('authenticates the combined request overview', async () => {
+    const { server } = await start();
+    await request(server)
+      .get('/api/agent-guard/overview')
+      .set('Authorization', mockCredentials.none.header())
+      .expect(401);
+    await request(server)
+      .get('/api/agent-guard/overview')
+      .set('Authorization', mockCredentials.service.header())
+      .expect(403);
+    const response = await request(server)
+      .get('/api/agent-guard/overview')
+      .set('Authorization', mockCredentials.user.header('user:default/guest'))
+      .expect(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toMatchObject({
+      viewer: 'user:default/guest',
+      cloudState: 'restricted',
+      items: [],
+    });
+  });
+
   it('authenticates read-only release browsing and does not invent releases', async () => {
     const { server, scaffolder } = await start();
     const url = '/api/agent-guard/rizz/releases';

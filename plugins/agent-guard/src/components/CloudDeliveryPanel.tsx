@@ -27,6 +27,16 @@ type Rollout = {
   readyPods: number;
   generation: number;
 };
+type ProposalHandoff = {
+  status: string;
+  decision?: { decision: string };
+  execution?: {
+    state: string;
+    taskId?: string;
+    prUrl?: string;
+    errorCode?: string;
+  };
+};
 const states = [
   'not_configured',
   'not_checked',
@@ -43,7 +53,13 @@ const validRollout = (value: Rollout) =>
   value.readyPods === value.desired &&
   Number.isSafeInteger(value.generation) &&
   value.generation > 0;
-export function CloudDeliveryPanel({ proposalId }: { proposalId: string }) {
+export function CloudDeliveryPanel({
+  proposalId,
+  handoff,
+}: {
+  proposalId: string;
+  handoff: ProposalHandoff;
+}) {
   const { fetch } = useApi(fetchApiRef);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [busy, setBusy] = useState(false);
@@ -111,87 +127,196 @@ export function CloudDeliveryPanel({ proposalId }: { proposalId: string }) {
         observation.smoke.state === 'verified',
       ].filter(Boolean).length
     : 0;
+  const stages = [
+    { label: 'Proposed', done: true },
+    { label: 'Approved', done: handoff.decision?.decision === 'approve' },
+    { label: 'Task started', done: Boolean(handoff.execution?.taskId) },
+    { label: 'PR opened', done: Boolean(handoff.execution?.prUrl) },
+    {
+      label: 'Merge verified',
+      done: observation?.github.state === 'merged_files_match',
+    },
+    {
+      label: 'Argo synced',
+      done:
+        observation?.argoCd.state === 'synced_files_match' &&
+        observation.argoCd.sync === 'Synced',
+    },
+    { label: 'Verified', done: observation?.deployed === true },
+  ];
+  const currentIndex = stages.findIndex(stage => !stage.done);
+  const halted = [
+    'rejected',
+    'needs_clarification',
+    'execution_failed',
+    'publish_failed',
+  ].includes(handoff.status);
   return (
-    <section className="ag-card" aria-label="Read-only cloud observation">
-      <span className="ag-eyebrow">Read-only cloud observation</span>
-      <h2>Cloud delivery journey</h2>
-      <p>
-        Checking reads GitHub, dedicated EKS Argo CD, live workloads and ALB
-        readiness. It never merges, syncs, deploys or calls Gemini.
-      </p>
-      <button className="ag-button" disabled={busy} onClick={check}>
-        {busy ? 'Checking cloud delivery…' : 'Check cloud delivery'}
-      </button>
-      {error && <p role="alert">{error}</p>}
-      <progress
-        aria-label="Verified delivery evidence"
-        max={4}
-        value={completed}
-      />
-      <p>{completed} of 4 evidence stages verified</p>
-      <div className="ag-cloud-delivery-grid">
+    <section
+      className="ag-card ag-delivery ag-cloud-delivery"
+      aria-label="Read-only cloud observation"
+    >
+      <div className="ag-section-heading">
         <div>
-          <h3>GitHub merge</h3>
-          <p>{humanize(observation?.github.state ?? 'not_checked')}</p>
-          {observation?.github.revision && (
-            <code>{observation.github.revision}</code>
+          <span className="ag-eyebrow">Read-only observation</span>
+          <h3>Cloud delivery journey</h3>
+        </div>
+        <button
+          className="ag-button"
+          type="button"
+          disabled={busy}
+          onClick={check}
+        >
+          {busy ? 'Checking cloud delivery…' : 'Check cloud delivery'}
+        </button>
+      </div>
+      <p className="ag-muted">
+        Approval starts Scaffolder; a human merges the PR before Argo CD can
+        deploy. This check only reads GitHub, Argo CD, Kubernetes and HTTPS
+        evidence.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      <ol className="ag-track" aria-label="Cloud delivery stages">
+        {stages.map((stage, index) => {
+          const state = stage.done
+            ? 'done'
+            : index !== currentIndex
+            ? 'future'
+            : halted
+            ? 'halted'
+            : 'current';
+          return (
+            <li
+              key={stage.label}
+              className={`ag-track__stage ag-track__stage--${state}`}
+              aria-current={state === 'current' ? 'step' : undefined}
+            >
+              <span className="ag-track__bar" aria-hidden="true" />
+              <strong>{stage.label}</strong>
+              <small>
+                {state === 'done'
+                  ? 'Complete'
+                  : state === 'halted'
+                  ? 'On hold'
+                  : state === 'current'
+                  ? 'Awaiting'
+                  : 'Not reached'}
+              </small>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="ag-cloud-delivery__evidence-heading">
+        <strong>Evidence</strong>
+        <span className="ag-pill ag-pill--neutral">
+          {completed} of 4 checks verified
+        </span>
+      </div>
+      <div className="ag-delivery__facts">
+        <div>
+          <span>Scaffolder handoff</span>
+          <strong>{humanize(handoff.execution?.state ?? 'not_started')}</strong>
+          {handoff.execution?.taskId && (
+            <small>
+              Task <code>{handoff.execution.taskId}</code> · logs restricted to
+              the backend service
+            </small>
+          )}
+          {handoff.execution?.errorCode && (
+            <small>{humanize(handoff.execution.errorCode)}</small>
           )}
         </div>
         <div>
-          <h3>Argo CD</h3>
-          <p>{humanize(observation?.argoCd.state ?? 'not_checked')}</p>
+          <span>GitHub pull request</span>
+          <strong>
+            {humanize(observation?.github.state ?? 'not_checked')}
+          </strong>
+          {handoff.execution?.prUrl && (
+            <a
+              href={handoff.execution.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open GitOps PR
+            </a>
+          )}
+          {observation?.github.revision && (
+            <small>
+              Revision <code>{observation.github.revision}</code>
+            </small>
+          )}
+        </div>
+        <div>
+          <span>Argo CD</span>
+          <strong>
+            {humanize(observation?.argoCd.state ?? 'not_checked')}
+          </strong>
           {observation?.argoCd.sync && (
-            <p>
+            <small>
               Sync: {observation.argoCd.sync} · Health:{' '}
               {observation.argoCd.health}
-            </p>
+            </small>
           )}
           {observation?.argoCd.revision && (
-            <code>{observation.argoCd.revision}</code>
+            <small>
+              Revision <code>{observation.argoCd.revision}</code>
+            </small>
           )}
         </div>
         <div>
-          <h3>Kubernetes rollout</h3>
-          <p>{humanize(observation?.workloads.state ?? 'not_checked')}</p>
+          <span>Kubernetes rollout</span>
+          <strong>
+            {humanize(observation?.workloads.state ?? 'not_checked')}
+          </strong>
           {observation?.workloads.reason && (
-            <p>{humanize(observation.workloads.reason)}</p>
+            <small>{humanize(observation.workloads.reason)}</small>
           )}
           {(['frontend', 'backend'] as const).map(part => {
             const rollout = observation?.workloads[part];
             return rollout ? (
-              <p key={part}>
+              <small key={part}>
                 {part}: {rollout.readyPods}/{rollout.desired} Pods ready ·{' '}
                 {rollout.updated} updated · {rollout.available} available ·
                 generation {rollout.generation}
-              </p>
+              </small>
             ) : null;
           })}
         </div>
         <div>
-          <h3>HTTPS smoke test</h3>
-          <p>{humanize(observation?.smoke.state ?? 'not_checked')}</p>
+          <span>HTTPS smoke test</span>
+          <strong>{humanize(observation?.smoke.state ?? 'not_checked')}</strong>
           {observation?.smoke.reason && (
-            <p>{humanize(observation.smoke.reason)}</p>
+            <small>{humanize(observation.smoke.reason)}</small>
           )}
           {observation?.smoke.state === 'verified' && (
-            <p>
+            <small>
               /healthz: alive · /readyz: ready · reviewed TLS certificate
               verified
-            </p>
+            </small>
           )}
         </div>
       </div>
-      <div className="ag-notice" role="status">
-        {observation?.deployed
-          ? 'Deployment verified for the approved release at this observation.'
-          : 'Deployment not verified. All four evidence stages must pass; Argo Healthy alone is insufficient.'}
+      <div
+        className={`ag-delivery__verdict ${
+          observation?.deployed ? 'ag-delivery__verdict--verified' : ''
+        }`}
+        role="status"
+      >
+        <span aria-hidden="true">{observation?.deployed ? '✓' : '○'}</span>
+        <strong>
+          {observation?.deployed
+            ? 'Deployment verified for the approved release at this observation.'
+            : 'Deployment not verified. All four evidence stages must pass; Argo Healthy alone is insufficient.'}
+        </strong>
+        {observation && (
+          <small>
+            Observed at {new Date(observation.checkedAt).toLocaleString()}
+          </small>
+        )}
       </div>
-      {observation && (
-        <p>
-          Observed at {observation.checkedAt}. This is a point-in-time read, not
-          continuous monitoring.
-        </p>
-      )}
+      <p className="ag-cloud-delivery__footnote">
+        A check is a point-in-time observation, not continuous monitoring.
+      </p>
     </section>
   );
 }

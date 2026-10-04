@@ -418,6 +418,44 @@ function seedRuntimeBaseline(
 }
 
 describe('authenticated cloud service using ONLY synthetic backend/reader/CI fixtures', () => {
+  it('includes scoped cloud requests in the combined overview without exposing snapshots', async () => {
+    const s = await start();
+    const submitted = await request(s.server)
+      .post(url)
+      .set('Authorization', header())
+      .send(s.proposal)
+      .expect(201);
+    const overview = '/api/agent-guard/overview';
+    const requester = await request(s.server)
+      .get(overview)
+      .set('Authorization', header())
+      .expect(200);
+    expect(requester.body.cloudState).toBe('configured');
+    expect(requester.body.items).toEqual([
+      expect.objectContaining({
+        id: submitted.body.id,
+        type: 'rizz',
+        requester: 'user:default/developer',
+        canReview: false,
+      }),
+    ]);
+    expect(JSON.stringify(requester.body)).not.toContain('snapshot');
+
+    const reviewer = await request(s.server)
+      .get(overview)
+      .set('Authorization', header('reviewer'))
+      .expect(200);
+    expect(reviewer.body.items[0]).toMatchObject({
+      id: submitted.body.id,
+      canReview: true,
+    });
+    const stranger = await request(s.server)
+      .get(overview)
+      .set('Authorization', header('stranger'))
+      .expect(200);
+    expect(stranger.body.items).toEqual([]);
+  });
+
   it('offers an authenticated read-only runtime preview without Jev, persistence or dispatch', async () => {
     const s = await start();
     const fixtureRecord = releaseFixtureEnvelope(cloudDeliveryFixture()).release
