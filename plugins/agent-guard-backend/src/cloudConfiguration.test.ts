@@ -7,10 +7,7 @@ import { cloudTemplateMatches, cloudTemplateSpec } from './cloudTemplate';
 import { ReleaseCatalog } from './releases';
 
 const example = parse(
-  readFileSync(
-    resolve(__dirname, '../../../app-config.rizz-cloud.yaml.example'),
-    'utf8',
-  ),
+  readFileSync(resolve(__dirname, '../../../app-config.cloud.yaml'), 'utf8'),
 );
 function configured() {
   const data = structuredClone(example);

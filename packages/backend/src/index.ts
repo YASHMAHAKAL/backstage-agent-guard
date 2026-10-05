@@ -30,7 +30,7 @@ backend.add(import('@backstage/plugin-techdocs-backend'));
 // auth plugin
 backend.add(import('@backstage/plugin-auth-backend'));
 // Opt-in GitHub mode deliberately does not register the guest provider.
-// app-config.github.yaml also nulls its configuration, so an accidental
+// app-config.portal.yaml also nulls its configuration, so an accidental
 // config/mode mismatch fails closed instead of enabling shared guest login.
 const authMode = process.env.AGENT_GUARD_AUTH_MODE ?? 'guest-demo';
 if (authMode === 'github') {

@@ -90,6 +90,5 @@ var/*.sqlite-*
 /infra/cloud-platform/config.local.json
 /infra/cloud-platform/alb-demo.config.local.json
 /infra/cloud-platform/*.rendered.yaml
-/app-config.rizz-releases.local.yaml
-# Cloud target/config contains operator-specific metadata; never commit it.
-app-config.rizz-cloud.local.yaml
+# Profile overrides, including app-config.cloud.local.yaml, are covered by
+# the *.local.yaml rule above.
