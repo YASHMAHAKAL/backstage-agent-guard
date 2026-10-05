@@ -1,0 +1,20 @@
+# Copy to ignored app-config.cloud.local.yaml and replace the placeholders.
+# Tokens remain environment references in app-config.cloud.yaml.
+# For release browsing alone, only the rizzReleases block is needed.
+agentGuard:
+  rizzReleases:
+    enabled: true
+    repository: example-owner/Rizz.AI
+    frontendRepository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/rizz-staging-frontend
+    backendRepository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/rizz-staging-backend
+  rizzCloud:
+    # Enable only after configuring the reviewed target and reader identity.
+    enabled: false
+    delivery:
+      enabled: false
+    target:
+      accountId: '000000000000'
+      sourceRepository: example-owner/Rizz.AI
+      gitopsRepository: https://github.com/example-owner/gitops.git
+      ingress:
+        operatorCidr: 203.0.113.10/32

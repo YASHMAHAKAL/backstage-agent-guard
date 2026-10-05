@@ -1,0 +1,35 @@
+# Shared release/cloud settings. Both capabilities are off until explicitly
+# enabled in ignored app-config.cloud.local.yaml. Loading this file provisions
+# nothing. The release-only command forces cloud operations off.
+agentGuard:
+  rizzReleases:
+    enabled: false
+    repository: example-owner/Rizz.AI
+    frontendRepository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/rizz-staging-frontend
+    backendRepository: 000000000000.dkr.ecr.us-east-1.amazonaws.com/rizz-staging-backend
+    awsProfile: rizz-release-reader
+    githubToken: ${RIZZ_RELEASE_GITHUB_TOKEN}
+  rizzCloud:
+    enabled: false
+    awsProfile: rizz-cloud-reader
+    githubToken: ${RIZZ_GITOPS_READ_TOKEN}
+    submitterGroups: [group:default/rizz-team, group:default/platform-team]
+    delivery:
+      enabled: false
+      destinationServer: https://kubernetes.default.svc
+    target:
+      id: eks-staging
+      accountId: '000000000000'
+      region: us-east-1
+      clusterName: rizz-eks-staging
+      namespace: rizz-staging
+      owner: group:default/platform-team
+      sourceRepository: example-owner/Rizz.AI
+      gitopsRepository: https://github.com/example-owner/gitops.git
+      gitopsBranch: main
+      gitopsPath: clusters/eks-staging/apps/rizz-ai
+      argoApplication: rizz-ai-staging
+      ingress:
+        # HTTPS target metadata comes from Terraform's fixed SSM parameter;
+        # the backend verifies the certificate fingerprint directly with ACM.
+        operatorCidr: 203.0.113.10/32

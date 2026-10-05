@@ -39,6 +39,8 @@ node --env-file-if-exists=.env .yarn/releases/yarn-4.13.0.cjs start
 
 Open <http://localhost:3000>. The default shared guest identity can browse and submit a proposal but cannot satisfy distinct human review. For a signed-in two-person demo, configure GitHub OAuth and separate mapped Backstage users, then run `node .yarn/releases/yarn-4.13.0.cjs start:github`. The [portal guide](docs/use-the-portal.md) explains the opt-in GitOps, Kubernetes, release, and cloud startup profiles. Keep tokens and secrets in ignored local files.
 
+Configuration uses five main files: shared defaults, signed-in portal, Kind, cloud and production. Release and EKS settings share one ignored `app-config.cloud.local.yaml` override; the release-only command keeps EKS operations disabled. See the [configuration profiles](docs/use-the-portal.md#configuration-profiles) for setup and the command that enables both Kind and cloud views.
+
 ## What was demonstrated
 
 A reviewed local GitOps PR was merged, Argo CD reported the service Synced/Healthy, its Pod became ready, and the internal HTTP check returned 200. The Rizz.AI EKS demo later showed one ready frontend and one ready backend Deployment and reached the restricted self-signed HTTPS login prompt. The operator reported teardown on 2026-10-04; this repository has not independently verified a zero-resource AWS inventory or a successful Gemini response. The Terraform runner contract exists but its automated AWS execution path is not activated. See [evidence and limits](docs/operations.md).

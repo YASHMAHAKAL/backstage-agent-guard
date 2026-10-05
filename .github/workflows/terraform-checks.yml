@@ -83,6 +83,7 @@ jobs:
       - run: >-
           node .yarn/releases/yarn-4.13.0.cjs workspace
           @internal/backstage-plugin-agent-guard-backend test --watch=false --runInBand
+          configProfiles.test.ts cloudConfiguration.test.ts
           terraformControl.test.ts terraformPlan.test.ts
           terraformPlanPreparation.test.ts terraformRemoteState.test.ts
           terraformConfigurationReader.test.ts terraformCapacityPublisher.test.ts

@@ -1,0 +1,62 @@
+# Shared signed-in portal. Provider registration still requires
+# AGENT_GUARD_AUTH_MODE=github; a mismatch fails closed.
+auth:
+  environment: github
+  providers:
+    guest: null
+    github:
+      github:
+        clientId: ${AUTH_GITHUB_CLIENT_ID}
+        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
+        signIn:
+          resolvers:
+            - resolver: userIdMatchingUserEntityAnnotation
+
+# The PAT is optional for login and browsing. Guarded publishing additionally
+# requires the explicitly configured GitOps repository and approved snapshot.
+integrations:
+  github:
+    - host: github.com
+      token: ${GITHUB_TOKEN}
+
+# Arrays replace rather than append in Backstage. This is the one signed-in
+# Catalog override, shared by portal, Kind, release-only and cloud startup.
+# Cloud actions stay disabled unless their separate profile enables them.
+catalog:
+  locations:
+    - type: file
+      target: ../../catalog-info.yaml
+    - type: file
+      target: ../../examples/entities.yaml
+    - type: file
+      target: ../../catalog/templates/nodejs-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/fastapi-api/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../catalog/templates/scheduled-worker/template.yaml
+      rules:
+        - allow: [Template]
+    - type: file
+      target: ../../examples/org.yaml
+      rules:
+        - allow: [User, Group]
+    - type: file
+      target: ../../examples/github-users.yaml
+      rules:
+        - allow: [User]
+    - type: file
+      target: ../../../Rizz.AI/catalog-info.yaml
+      rules:
+        - allow: [System, Component, API]
+    - type: file
+      target: ../../catalog/rizz-resources.yaml
+      rules:
+        - allow: [Resource]
+    - type: file
+      target: ../../catalog/templates/deploy-rizz-ai/template.yaml
+      rules:
+        - allow: [Template]

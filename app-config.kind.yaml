@@ -1,5 +1,4 @@
-# Opt-in local Kubernetes view. Keep credentials in the process environment,
-# not in this repository or Catalog annotations.
+# Optional read-only Kind view. Credentials stay in the process environment.
 kubernetes:
   serviceLocatorMethod:
     type: multiTenant
@@ -14,8 +13,6 @@ kubernetes:
           caData: ${AGENT_GUARD_K8S_CA_DATA}
           skipTLSVerify: false
           skipMetricsLookup: true
-  # Keep the portal read-only and fetch only the resource kinds this portfolio
-  # demo produces or needs to explain their runtime state.
   objectTypes:
     - pods
     - services

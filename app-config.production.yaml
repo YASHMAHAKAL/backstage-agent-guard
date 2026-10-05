@@ -29,16 +29,7 @@ backend:
       #     $file: <file-path>/ca/server.crt
 
 auth:
-  environment: github
-  providers:
-    guest: null
-    github:
-      github:
-        clientId: ${AUTH_GITHUB_CLIENT_ID}
-        clientSecret: ${AUTH_GITHUB_CLIENT_SECRET}
-        signIn:
-          resolvers:
-            - resolver: userIdMatchingUserEntityAnnotation
+  $include: ./app-config.portal.yaml#auth
 
 # Generate this repository's TechDocs in the backend image without Docker-in-Docker.
 techdocs:
