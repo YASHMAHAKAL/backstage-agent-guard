@@ -55,7 +55,7 @@ flowchart TB
     EKS["EKS control plane<br/>Restricted operator access"]
     Secrets["Secrets Manager<br/>Privately entered runtime values"]
     Target["ACM temporary self-signed certificate<br/>SSM HTTPS target metadata"]
-    subgraph VPC["VPC — two availability zones"]
+    subgraph VPC["VPC / two AZs"]
       ALB["Public ALB<br/>HTTPS restricted to operator /32"]
       NAT["Single NAT gateway + EIP"]
       subgraph Workers["Private EKS workers"]
